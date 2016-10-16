@@ -1,7 +1,5 @@
-use std::io;
 use std::fmt;
 use std::result;
-use std::error;
 use error::{At, FilePosition};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -23,67 +21,50 @@ pub struct Options {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub enum TokenizeState {
-    ChunkStart,
+pub enum State {
+    LineStart,
+    ParamName,
+    Contents,
 }
 
 #[derive(Copy, Clone, Debug)]
 pub struct Iter<'a> {
     options: Options,
-    state: TokenizeState,
+    state: State,
     remaining: &'a [u8],
+}
+
+impl<'a> Iter<'a> {
+    fn next_bytes_eq(&self, other: &'static [u8]) -> bool {
+        if self.remaining.len() < other.len() {
+            return false;
+        }
+        &self.remaining[0..other.len()] == other
+    }
 }
 
 impl<'a> Iterator for Iter<'a> {
     type Item = Result<TokenRef<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        None
+        match self.state {
+            State::LineStart => if self.next_bytes_eq(self.options.marker) {
+                self.state = State::ParamName;
+                return Some(Ok(TokenRef::Marker));
+            } else {
+                None
+            },
+            State::ParamName => None,
+            State::Contents => None,
+        }
     }
 }
 
 pub fn tokenize<'a>(options: Options, input: &'a [u8]) -> Iter<'a> {
     Iter {
         options: options,
-        state: TokenizeState::ChunkStart,
+        state: State::LineStart,
         remaining: input,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_tokenizer() {
-        let mut tokens = tokenize(
-            Options {
-                marker: b"##",
-                var_start: b"${",
-                var_end: b"}"
-            },
-            b"## lib: hello"
-        );
-
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Marker)));
-    }
-}
-
-#[derive(Debug)]
-pub enum Error {
-    Io(io::Error),
-    Lex(At<LexError>),
-}
-
-impl Eq for Error {}
-
-impl PartialEq for Error {
-    fn eq(&self, other: &Error) -> bool {
-        match (self, other) {
-            (&Error::Io(_), &Error::Io(_)) => true,
-            (&Error::Lex(ref a), &Error::Lex(ref b)) => a == b,
-            _ => false,
-        }
     }
 }
 
@@ -106,28 +87,23 @@ impl LexError {
     }
 }
 
-impl error::Error for Error {
-    fn description(&self) -> &str {
-        match *self {
-            Error::Io(ref e) => e.description(),
-            Error::Lex(_) => "lexer error",
-        }
+pub type Result<T> = result::Result<T, At<LexError>>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tokenizer() {
+        let mut tokens = tokenize(
+            Options {
+                marker: b"##",
+                var_start: b"${",
+                var_end: b"}"
+            },
+            b"## lib: hello"
+        );
+
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Marker)));
     }
 }
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::Io(ref e) => write!(f, "I/O error: {}", e),
-            Error::Lex(ref e) => e.fmt(f),
-        }
-    }
-}
-
-impl From<io::Error> for Error {
-    fn from(other: io::Error) -> Self {
-        Error::Io(other)
-    }
-}
-
-pub type Result<T> = result::Result<T, Error>;
