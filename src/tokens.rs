@@ -2,8 +2,9 @@ use std::io;
 use std::fmt;
 use std::result;
 use std::error;
+use error::{At, FilePosition};
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum TokenRef<'a> {
     Marker,
     Name(&'a str),
@@ -34,41 +35,12 @@ pub struct Iter<'a> {
 }
 
 impl<'a> Iterator for Iter<'a> {
-    type Item = TokenRef<'a>;
+    type Item = Result<TokenRef<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         None
     }
 }
-
-#[derive(Debug)]
-pub enum Error {
-    Io(io::Error),
-}
-
-impl error::Error for Error {
-    fn description(&self) -> &str {
-        match *self {
-            Error::Io(ref e) => e.description(),
-        }
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::Io(ref e) => write!(f, "I/O error: {}", e),
-        }
-    }
-}
-
-impl From<io::Error> for Error {
-    fn from(other: io::Error) -> Self {
-        Error::Io(other)
-    }
-}
-
-pub type Result<T> = result::Result<T, Error>;
 
 pub fn tokenize<'a>(options: Options, input: &'a [u8]) -> Iter<'a> {
     Iter {
@@ -84,13 +56,78 @@ mod tests {
 
     #[test]
     fn test_tokenizer() {
-        let tokens: Vec<_> = tokenize(
+        let mut tokens = tokenize(
             Options {
                 marker: b"##",
                 var_start: b"${",
                 var_end: b"}"
             },
             b"## lib: hello"
-        ).collect();
+        );
+
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Marker)));
     }
 }
+
+#[derive(Debug)]
+pub enum Error {
+    Io(io::Error),
+    Lex(At<LexError>),
+}
+
+impl Eq for Error {}
+
+impl PartialEq for Error {
+    fn eq(&self, other: &Error) -> bool {
+        match (self, other) {
+            (&Error::Io(_), &Error::Io(_)) => true,
+            (&Error::Lex(ref a), &Error::Lex(ref b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum LexError {}
+
+impl fmt::Display for LexError {
+    fn fmt(&self, _f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {}
+    }
+}
+
+impl LexError {
+    pub fn at(self, lo: FilePosition, hi: FilePosition) -> At<LexError> {
+        At {
+            lo: lo,
+            hi: hi,
+            desc: self,
+        }
+    }
+}
+
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        match *self {
+            Error::Io(ref e) => e.description(),
+            Error::Lex(_) => "lexer error",
+        }
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Error::Io(ref e) => write!(f, "I/O error: {}", e),
+            Error::Lex(ref e) => e.fmt(f),
+        }
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(other: io::Error) -> Self {
+        Error::Io(other)
+    }
+}
+
+pub type Result<T> = result::Result<T, Error>;
