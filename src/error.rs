@@ -32,6 +32,33 @@ pub struct FilePosition {
     pub byte: usize,
 }
 
+impl FilePosition {
+    pub fn new() -> FilePosition {
+        FilePosition {
+            line: 0,
+            col: 0,
+            byte: 0,
+        }
+    }
+
+    pub fn advance(&mut self, bytes: usize) {
+        self.byte += bytes;
+        self.col += bytes;
+    }
+
+    pub fn advanced(&self, bytes: usize) -> FilePosition {
+        let mut other = self.clone();
+        other.advance(bytes);
+        other
+    }
+
+    pub fn next_line(&mut self, bytes: usize) {
+        self.byte += bytes;
+        self.col = 0;
+        self.line += 1;
+    }
+}
+
 impl fmt::Display for FilePosition {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "line {}, col {}", self.line, self.col)
