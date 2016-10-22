@@ -17,6 +17,7 @@ pub enum TokenRef<'a> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct Options {
+    skip_lines: &'static [u8],
     marker: &'static [u8],
     var_start: &'static [u8],
     var_end: &'static [u8],
@@ -60,7 +61,7 @@ impl<'a> Iter<'a> {
             state = match state {
                 LexState::LineStart => {
                     debug!("STATE LineStart");
-                    if combinator::try_exact_bytes(&mut self.cursor, self.input, self.options.marker) {
+                    if combinator::check_exact_bytes(&mut self.cursor, self.input, self.options.marker) {
                         LexState::ParamKey
                     } else {
                         LexState::ContentStart
@@ -68,40 +69,40 @@ impl<'a> Iter<'a> {
                 },
                 LexState::ParamKey => {
                     debug!("STATE ParamKey");
-                    let name = try!(combinator::expect_name(&mut self.cursor, self.input, b" \t", b"\n\r:"));
-                    self.token(TokenRef::Key(str::from_utf8(name).unwrap()));
-                    if combinator::try_exact_bytes(&mut self.cursor, self.input, b":") {
-                        LexState::ParamValue
-                    } else {
-                        LexState::Eol
+                    let (name, termination) = try!(combinator::expect_terminated_text(&mut self.cursor, self.input, b":"));
+                    self.token(TokenRef::Key(str::from_utf8(combinator::trim(name)).unwrap()));
+                    match termination {
+                        combinator::TermType::EolOrEof => LexState::Eol,
+                        combinator::TermType::Sequence => LexState::ParamValue,
                     }
                 },
                 LexState::ParamValue => {
                     debug!("STATE ParamValue");
-                    let name = try!(combinator::expect_name(&mut self.cursor, self.input, b" \t", b"\n\r"));
-                    self.token(TokenRef::Value(str::from_utf8(name).unwrap()));
+                    let name = try!(combinator::expect_text(&mut self.cursor, self.input));
+                    self.token(TokenRef::Value(str::from_utf8(combinator::trim(name)).unwrap()));
                     LexState::Eol
                 },
                 LexState::ContentStart => {
                     debug!("STATE ContentStart");
-                    let (contents, termination) = try!(combinator::expect_text_terminated_by_sequence_or_newline(&mut self.cursor, self.input, self.options.var_start));
-                    if contents.len() > 0 {
-                        self.token(TokenRef::MatchText(str::from_utf8(contents).unwrap()));
-                    }
-                    match termination {
-                        combinator::TermType::EolOrEof => {
+                    if combinator::check_exact_bytes(&mut self.cursor, self.input, self.options.skip_lines) {
+                        if combinator::check_new_line(&mut self.cursor, self.input) {
                             self.token(TokenRef::MatchAnyNumberOfLines);
-                            LexState::Eol
-                        },
-                        combinator::TermType::Sequence => {
-                            try!(combinator::expect_exact_bytes(&mut self.cursor, self.input, self.options.var_start));
-                            LexState::Var
+                            LexState::LineStart
+                        } else {
+                            if self.cursor.byte == self.input.len() {
+                                self.token(TokenRef::MatchAnyNumberOfLines);
+                                LexState::Eol
+                            } else {
+                                return Err(LexError::ExpectedNewline.at(self.cursor.clone(), self.cursor.clone()));
+                            }
                         }
+                    } else {
+                        LexState::ContentContinued
                     }
                 },
                 LexState::Var => {
                     debug!("STATE Var");
-                    let (contents, termination) = try!(combinator::expect_text_terminated_by_sequence_or_newline(
+                    let (contents, termination) = try!(combinator::expect_terminated_text(
                         &mut self.cursor, self.input, self.options.var_end));
                     match termination {
                         combinator::TermType::EolOrEof => return Err(LexError::ExpectedSequenceFoundNewline {
@@ -109,18 +110,24 @@ impl<'a> Iter<'a> {
                         }.at(self.cursor.clone(), self.cursor.clone())),
                         combinator::TermType::Sequence => {
                             self.token(TokenRef::Var(str::from_utf8(combinator::trim(contents)).unwrap()));
-                            try!(combinator::expect_exact_bytes(&mut self.cursor, self.input, self.options.var_end));
                             LexState::ContentContinued
                         }
                     }
                 },
                 LexState::ContentContinued => {
                     debug!("STATE ContentContinued");
-                    LexState::Eol
+                    let (contents, termination) = try!(combinator::expect_terminated_text(&mut self.cursor, self.input, self.options.var_start));
+                    if contents.len() > 0 {
+                        self.token(TokenRef::MatchText(str::from_utf8(contents).unwrap()));
+                    }
+                    match termination {
+                        combinator::TermType::EolOrEof => LexState::Eol,
+                        combinator::TermType::Sequence => LexState::Var,
+                    }
                 },
                 LexState::Eol => {
                     debug!("STATE Eol");
-                    if combinator::try_new_line(&mut self.cursor, self.input) {
+                    if combinator::check_new_line(&mut self.cursor, self.input) {
                         LexState::LineStart
                     } else {
                         break;
@@ -187,16 +194,21 @@ mod tests {
 
     use super::*;
 
+    fn default_options() -> Options {
+        Options {
+            skip_lines: b"..",
+            marker: b"##",
+            var_start: b"${",
+            var_end: b"}"
+        }
+    }
+
     #[test]
     fn test_single_param_line() {
         let _ = env_logger::init();
 
         let mut tokens = tokenize(
-            Options {
-                marker: b"##",
-                var_start: b"${",
-                var_end: b"}"
-            },
+            default_options(),
             b"## lib: hello"
         );
 
@@ -210,11 +222,7 @@ mod tests {
         let _ = env_logger::init();
 
         let mut tokens = tokenize(
-            Options {
-                marker: b"##",
-                var_start: b"${",
-                var_end: b"}"
-            },
+            default_options(),
             b"Blah blah blah"
         );
 
@@ -225,16 +233,152 @@ mod tests {
     #[test]
     fn test_single_line_with_var() {
         let _ = env_logger::init();
-        let options = Options {
-            marker: b"##",
-            var_start: b"${",
-            var_end: b"}"
-        };
 
         let mut tokens;
 
-        tokens = tokenize(options, b"${ haha, yay }");
+        tokens = tokenize(default_options(), b"${ haha, yay }");
         assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("haha, yay"))));
+        assert_eq!(tokens.next(), None);
+    }
+
+    #[test]
+    fn test_single_line_with_content_and_var() {
+        let _ = env_logger::init();
+
+        let mut tokens;
+
+        tokens = tokenize(default_options(), b"Foo ${ haha, yay }");
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText("Foo "))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("haha, yay"))));
+        assert_eq!(tokens.next(), None);
+    }
+
+    #[test]
+    fn test_single_line_with_var_and_content() {
+        let _ = env_logger::init();
+
+        let mut tokens;
+
+        tokens = tokenize(default_options(), b"${ haha, yay } Bar");
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("haha, yay"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText(" Bar"))));
+        assert_eq!(tokens.next(), None);
+    }
+
+    #[test]
+    fn test_single_line_mixed() {
+        let _ = env_logger::init();
+
+        let mut tokens;
+
+        tokens = tokenize(default_options(), b"Foo ${ haha, yay } Bar");
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText("Foo "))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("haha, yay"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText(" Bar"))));
+        assert_eq!(tokens.next(), None);
+
+        tokens = tokenize(default_options(), b"Foo ${zai} Bar${x}");
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText("Foo "))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("zai"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText(" Bar"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("x"))));
+        assert_eq!(tokens.next(), None);
+
+        tokens = tokenize(default_options(), b"Foo ${}");
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText("Foo "))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var(""))));
+        assert_eq!(tokens.next(), None);
+    }
+
+    #[test]
+    fn test_multi_line_params_and_content() {
+        let _ = env_logger::init();
+
+        let mut tokens;
+
+        tokens = tokenize(default_options(), b"## lib: hello
+${ X }");
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Key("lib"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Value("hello"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("X"))));
+        assert_eq!(tokens.next(), None);
+    }
+
+    #[test]
+    fn test_multi_line_params_and_content_with_skipped_lines() {
+        let _ = env_logger::init();
+
+        let mut tokens;
+
+        tokens = tokenize(default_options(), b"## lib: hello
+..
+${ X }
+..");
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Key("lib"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Value("hello"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchAnyNumberOfLines)));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("X"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchAnyNumberOfLines)));
+        assert_eq!(tokens.next(), None);
+
+        tokens = tokenize(default_options(), b"## lib: hello
+${ X }
+..
+");
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Key("lib"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Value("hello"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("X"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchAnyNumberOfLines)));
+        assert_eq!(tokens.next(), None);
+    }
+
+    #[test]
+    fn test_multi_line_content_with_params() {
+        let _ = env_logger::init();
+
+        let mut tokens;
+
+        tokens = tokenize(default_options(), b"..
+${ X }
+..
+## a: b
+## c: d
+");
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchAnyNumberOfLines)));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("X"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchAnyNumberOfLines)));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Key("a"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Value("b"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Key("c"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Value("d"))));
+        assert_eq!(tokens.next(), None);
+    }
+
+    #[test]
+    fn test_multi_line_varying_content_and_params() {
+        let _ = env_logger::init();
+
+        let mut tokens;
+
+        tokens = tokenize(default_options(), b"## a: b
+f ${ X } b
+..
+## c: d
+..
+k ${ Y } z
+");
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Key("a"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Value("b"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText("f "))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("X"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText(" b"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchAnyNumberOfLines)));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Key("c"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Value("d"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchAnyNumberOfLines)));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText("k "))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("Y"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText(" z"))));
         assert_eq!(tokens.next(), None);
     }
 }
