@@ -1,10 +1,8 @@
 mod combinator;
 
-use error::{At, FilePosition};
+use error::{At, FilePosition, LexError, LexResult};
 use std::collections::VecDeque;
 use std::str;
-
-pub use self::combinator::{LexError, Result};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum TokenRef<'a> {
@@ -56,11 +54,10 @@ impl<'a> Iter<'a> {
         self.tokens.push_back(token);
     }
 
-    fn eat_bytes(&mut self, mut state: LexState) -> Result<LexState> {
+    fn eat_bytes(&mut self, mut state: LexState) -> LexResult<LexState> {
         while self.tokens.is_empty() {
             state = match state {
                 LexState::LineStart => {
-                    debug!("STATE LineStart");
                     if combinator::check_exact_bytes(&mut self.cursor, self.input, self.options.marker) {
                         LexState::ParamKey
                     } else {
@@ -68,7 +65,6 @@ impl<'a> Iter<'a> {
                     }
                 },
                 LexState::ParamKey => {
-                    debug!("STATE ParamKey");
                     let (name, termination) = try!(combinator::expect_terminated_text(&mut self.cursor, self.input, b":"));
                     self.token(TokenRef::Key(str::from_utf8(combinator::trim(name)).unwrap()));
                     match termination {
@@ -77,13 +73,11 @@ impl<'a> Iter<'a> {
                     }
                 },
                 LexState::ParamValue => {
-                    debug!("STATE ParamValue");
                     let name = try!(combinator::expect_text(&mut self.cursor, self.input));
                     self.token(TokenRef::Value(str::from_utf8(combinator::trim(name)).unwrap()));
                     LexState::Eol
                 },
                 LexState::ContentStart => {
-                    debug!("STATE ContentStart");
                     if combinator::check_exact_bytes(&mut self.cursor, self.input, self.options.skip_lines) {
                         if combinator::check_new_line(&mut self.cursor, self.input) {
                             self.token(TokenRef::MatchAnyNumberOfLines);
@@ -101,7 +95,6 @@ impl<'a> Iter<'a> {
                     }
                 },
                 LexState::Var => {
-                    debug!("STATE Var");
                     let (contents, termination) = try!(combinator::expect_terminated_text(
                         &mut self.cursor, self.input, self.options.var_end));
                     match termination {
@@ -115,7 +108,6 @@ impl<'a> Iter<'a> {
                     }
                 },
                 LexState::ContentContinued => {
-                    debug!("STATE ContentContinued");
                     let (contents, termination) = try!(combinator::expect_terminated_text(&mut self.cursor, self.input, self.options.var_start));
                     if contents.len() > 0 {
                         self.token(TokenRef::MatchText(str::from_utf8(contents).unwrap()));
@@ -126,7 +118,6 @@ impl<'a> Iter<'a> {
                     }
                 },
                 LexState::Eol => {
-                    debug!("STATE Eol");
                     if combinator::check_new_line(&mut self.cursor, self.input) {
                         LexState::LineStart
                     } else {
@@ -141,7 +132,7 @@ impl<'a> Iter<'a> {
 }
 
 impl<'a> Iterator for Iter<'a> {
-    type Item = Result<TokenRef<'a>>;
+    type Item = LexResult<TokenRef<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {

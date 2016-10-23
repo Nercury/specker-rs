@@ -1,42 +1,4 @@
-use error::{At, FilePosition};
-use std::fmt;
-use std::result;
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum LexError {
-    ExpectedName,
-    UnexpectedSymbol {
-        expected: &'static [u8],
-        found: Vec<u8>,
-    },
-    ExpectedSequenceFoundNewline {
-        expected: &'static [u8],
-    },
-    ExpectedNewline,
-}
-
-impl fmt::Display for LexError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            LexError::ExpectedName => "expected name".fmt(f),
-            LexError::UnexpectedSymbol { .. } => "unexpected symbol".fmt(f),
-            LexError::ExpectedSequenceFoundNewline { .. } => "expected sequence, found newline".fmt(f),
-            LexError::ExpectedNewline => "expected newline".fmt(f),
-        }
-    }
-}
-
-impl LexError {
-    pub fn at(self, lo: FilePosition, hi: FilePosition) -> At<LexError> {
-        At {
-            lo: lo,
-            hi: hi,
-            desc: self,
-        }
-    }
-}
-
-pub type Result<T> = result::Result<T, At<LexError>>;
+use error::{FilePosition, LexResult};
 
 pub fn trim(text: &[u8]) -> &[u8] {
     let mut start = 0;
@@ -83,7 +45,7 @@ pub enum TermType {
     EolOrEof,
 }
 
-pub fn expect_text<'a>(cursor: &mut FilePosition, input: &'a [u8]) -> Result<&'a [u8]> {
+pub fn expect_text<'a>(cursor: &mut FilePosition, input: &'a [u8]) -> LexResult<&'a [u8]> {
     let start = cursor.byte;
     let mut end = start;
     loop {
@@ -98,7 +60,7 @@ pub fn expect_text<'a>(cursor: &mut FilePosition, input: &'a [u8]) -> Result<&'a
     return Ok(&input[start..end]);
 }
 
-pub fn expect_terminated_text<'a>(cursor: &mut FilePosition, input: &'a [u8], term_sequence: &'static [u8]) -> Result<(&'a [u8], TermType)> {
+pub fn expect_terminated_text<'a>(cursor: &mut FilePosition, input: &'a [u8], term_sequence: &'static [u8]) -> LexResult<(&'a [u8], TermType)> {
     let start = cursor.byte;
     let mut end = start;
     loop {

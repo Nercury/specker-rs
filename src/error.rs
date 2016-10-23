@@ -1,4 +1,41 @@
 use std::fmt;
+use std::result;
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum LexError {
+    ExpectedName,
+    UnexpectedSymbol {
+        expected: &'static [u8],
+        found: Vec<u8>,
+    },
+    ExpectedSequenceFoundNewline {
+        expected: &'static [u8],
+    },
+    ExpectedNewline,
+}
+
+impl fmt::Display for LexError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            LexError::ExpectedName => "expected name".fmt(f),
+            LexError::UnexpectedSymbol { .. } => "unexpected symbol".fmt(f),
+            LexError::ExpectedSequenceFoundNewline { .. } => "expected sequence, found newline".fmt(f),
+            LexError::ExpectedNewline => "expected newline".fmt(f),
+        }
+    }
+}
+
+impl LexError {
+    pub fn at(self, lo: FilePosition, hi: FilePosition) -> At<LexError> {
+        At {
+            lo: lo,
+            hi: hi,
+            desc: self,
+        }
+    }
+}
+
+pub type LexResult<T> = result::Result<T, At<LexError>>;
 
 #[derive(Debug, Clone)]
 pub struct At<T> where T: fmt::Debug + Clone {
