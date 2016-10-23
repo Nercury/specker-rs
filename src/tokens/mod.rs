@@ -5,7 +5,16 @@ use std::collections::VecDeque;
 use std::str;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum TokenRef<'a> {
+pub struct TokenRef<'a> {
+    pub value: TokenValueRef<'a>,
+    /// The low position at which this token exists.
+    pub lo: FilePosition,
+    /// One byte beyond the last character at which token ends.
+    pub hi: FilePosition,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum TokenValueRef<'a> {
     Key(&'a str),
     Value(&'a str),
     MatchAnyNumberOfLines,
@@ -43,13 +52,13 @@ pub enum IterState {
 pub struct Iter<'a> {
     options: Options,
     state: IterState,
-    tokens: VecDeque<TokenRef<'a>>,
+    tokens: VecDeque<TokenValueRef<'a>>,
     cursor: FilePosition,
     input: &'a [u8],
 }
 
 impl<'a> Iter<'a> {
-    fn token(&mut self, token: TokenRef<'a>) {
+    fn token(&mut self, token: TokenValueRef<'a>) {
         debug!("token: {:?}", token);
         self.tokens.push_back(token);
     }
@@ -66,25 +75,25 @@ impl<'a> Iter<'a> {
                 },
                 LexState::ParamKey => {
                     let (name, termination) = try!(combinator::expect_terminated_text(&mut self.cursor, self.input, b":"));
-                    self.token(TokenRef::Key(str::from_utf8(combinator::trim(name)).unwrap()));
+                    self.token(TokenValueRef::Key(str::from_utf8(combinator::trim(name)).unwrap()));
                     match termination {
                         combinator::TermType::EolOrEof => LexState::Eol,
                         combinator::TermType::Sequence => LexState::ParamValue,
                     }
                 },
                 LexState::ParamValue => {
-                    let name = try!(combinator::expect_text(&mut self.cursor, self.input));
-                    self.token(TokenRef::Value(str::from_utf8(combinator::trim(name)).unwrap()));
+                    let name = try!(combinator::expect_text(&mut self.cursor, self.input)).trimmed();
+                    self.token(TokenValueRef::Value(str::from_utf8(name.slice).unwrap()));
                     LexState::Eol
                 },
                 LexState::ContentStart => {
                     if combinator::check_exact_bytes(&mut self.cursor, self.input, self.options.skip_lines) {
                         if combinator::check_new_line(&mut self.cursor, self.input) {
-                            self.token(TokenRef::MatchAnyNumberOfLines);
+                            self.token(TokenValueRef::MatchAnyNumberOfLines);
                             LexState::LineStart
                         } else {
                             if self.cursor.byte == self.input.len() {
-                                self.token(TokenRef::MatchAnyNumberOfLines);
+                                self.token(TokenValueRef::MatchAnyNumberOfLines);
                                 LexState::Eol
                             } else {
                                 return Err(LexError::ExpectedNewline.at(self.cursor.clone(), self.cursor.clone()));
@@ -102,7 +111,7 @@ impl<'a> Iter<'a> {
                             expected: self.options.var_end
                         }.at(self.cursor.clone(), self.cursor.clone())),
                         combinator::TermType::Sequence => {
-                            self.token(TokenRef::Var(str::from_utf8(combinator::trim(contents)).unwrap()));
+                            self.token(TokenValueRef::Var(str::from_utf8(combinator::trim(contents)).unwrap()));
                             LexState::ContentContinued
                         }
                     }
@@ -110,7 +119,7 @@ impl<'a> Iter<'a> {
                 LexState::ContentContinued => {
                     let (contents, termination) = try!(combinator::expect_terminated_text(&mut self.cursor, self.input, self.options.var_start));
                     if contents.len() > 0 {
-                        self.token(TokenRef::MatchText(str::from_utf8(contents).unwrap()));
+                        self.token(TokenValueRef::MatchText(str::from_utf8(contents).unwrap()));
                     }
                     match termination {
                         combinator::TermType::EolOrEof => LexState::Eol,
@@ -132,7 +141,7 @@ impl<'a> Iter<'a> {
 }
 
 impl<'a> Iterator for Iter<'a> {
-    type Item = LexResult<TokenRef<'a>>;
+    type Item = LexResult<TokenValueRef<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -203,8 +212,8 @@ mod tests {
             b"## lib: hello"
         );
 
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Key("lib"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Value("hello"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Key("lib"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Value("hello"))));
         assert_eq!(tokens.next(), None);
     }
 
@@ -217,7 +226,7 @@ mod tests {
             b"Blah blah blah"
         );
 
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText("Blah blah blah"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchText("Blah blah blah"))));
         assert_eq!(tokens.next(), None);
     }
 
@@ -228,7 +237,7 @@ mod tests {
         let mut tokens;
 
         tokens = tokenize(default_options(), b"${ haha, yay }");
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("haha, yay"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Var("haha, yay"))));
         assert_eq!(tokens.next(), None);
     }
 
@@ -239,8 +248,8 @@ mod tests {
         let mut tokens;
 
         tokens = tokenize(default_options(), b"Foo ${ haha, yay }");
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText("Foo "))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("haha, yay"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchText("Foo "))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Var("haha, yay"))));
         assert_eq!(tokens.next(), None);
     }
 
@@ -251,8 +260,8 @@ mod tests {
         let mut tokens;
 
         tokens = tokenize(default_options(), b"${ haha, yay } Bar");
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("haha, yay"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText(" Bar"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Var("haha, yay"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchText(" Bar"))));
         assert_eq!(tokens.next(), None);
     }
 
@@ -263,21 +272,21 @@ mod tests {
         let mut tokens;
 
         tokens = tokenize(default_options(), b"Foo ${ haha, yay } Bar");
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText("Foo "))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("haha, yay"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText(" Bar"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchText("Foo "))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Var("haha, yay"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchText(" Bar"))));
         assert_eq!(tokens.next(), None);
 
         tokens = tokenize(default_options(), b"Foo ${zai} Bar${x}");
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText("Foo "))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("zai"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText(" Bar"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("x"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchText("Foo "))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Var("zai"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchText(" Bar"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Var("x"))));
         assert_eq!(tokens.next(), None);
 
         tokens = tokenize(default_options(), b"Foo ${}");
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText("Foo "))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var(""))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchText("Foo "))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Var(""))));
         assert_eq!(tokens.next(), None);
     }
 
@@ -289,9 +298,9 @@ mod tests {
 
         tokens = tokenize(default_options(), b"## lib: hello
 ${ X }");
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Key("lib"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Value("hello"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("X"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Key("lib"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Value("hello"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Var("X"))));
         assert_eq!(tokens.next(), None);
     }
 
@@ -305,21 +314,21 @@ ${ X }");
 ..
 ${ X }
 ..");
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Key("lib"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Value("hello"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchAnyNumberOfLines)));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("X"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchAnyNumberOfLines)));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Key("lib"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Value("hello"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchAnyNumberOfLines)));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Var("X"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchAnyNumberOfLines)));
         assert_eq!(tokens.next(), None);
 
         tokens = tokenize(default_options(), b"## lib: hello
 ${ X }
 ..
 ");
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Key("lib"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Value("hello"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("X"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchAnyNumberOfLines)));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Key("lib"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Value("hello"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Var("X"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchAnyNumberOfLines)));
         assert_eq!(tokens.next(), None);
     }
 
@@ -335,13 +344,13 @@ ${ X }
 ## a: b
 ## c: d
 ");
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchAnyNumberOfLines)));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("X"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchAnyNumberOfLines)));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Key("a"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Value("b"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Key("c"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Value("d"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchAnyNumberOfLines)));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Var("X"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchAnyNumberOfLines)));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Key("a"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Value("b"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Key("c"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Value("d"))));
         assert_eq!(tokens.next(), None);
     }
 
@@ -358,18 +367,18 @@ f ${ X } b
 ..
 k ${ Y } z
 ");
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Key("a"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Value("b"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText("f "))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("X"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText(" b"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchAnyNumberOfLines)));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Key("c"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Value("d"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchAnyNumberOfLines)));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText("k "))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::Var("Y"))));
-        assert_eq!(tokens.next(), Some(Ok(TokenRef::MatchText(" z"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Key("a"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Value("b"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchText("f "))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Var("X"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchText(" b"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchAnyNumberOfLines)));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Key("c"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Value("d"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchAnyNumberOfLines)));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchText("k "))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::Var("Y"))));
+        assert_eq!(tokens.next(), Some(Ok(TokenValueRef::MatchText(" z"))));
         assert_eq!(tokens.next(), None);
     }
 }

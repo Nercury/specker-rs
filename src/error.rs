@@ -1,26 +1,23 @@
 use std::fmt;
 use std::result;
+use std::str;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum LexError {
-    ExpectedName,
-    UnexpectedSymbol {
-        expected: &'static [u8],
-        found: Vec<u8>,
-    },
     ExpectedSequenceFoundNewline {
         expected: &'static [u8],
     },
     ExpectedNewline,
+    Utf8(str::Utf8Error),
 }
 
 impl fmt::Display for LexError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            LexError::ExpectedName => "expected name".fmt(f),
-            LexError::UnexpectedSymbol { .. } => "unexpected symbol".fmt(f),
-            LexError::ExpectedSequenceFoundNewline { .. } => "expected sequence, found newline".fmt(f),
-            LexError::ExpectedNewline => "expected newline".fmt(f),
+            LexError::ExpectedSequenceFoundNewline { ref expected } =>
+                write!(f, "Expected \"{}\", found new line", String::from_utf8_lossy(expected)),
+            LexError::ExpectedNewline => "Expected new line".fmt(f),
+            LexError::Utf8(e) => e.fmt(f),
         }
     }
 }
@@ -35,7 +32,33 @@ impl LexError {
     }
 }
 
+impl From<str::Utf8Error> for LexError {
+    fn from(other: str::Utf8Error) -> Self {
+        LexError::Utf8(other)
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum ParseError {}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, _: &mut fmt::Formatter) -> fmt::Result {
+        match *self {}
+    }
+}
+
+impl ParseError {
+    pub fn at(self, lo: FilePosition, hi: FilePosition) -> At<ParseError> {
+        At {
+            lo: lo,
+            hi: hi,
+            desc: self,
+        }
+    }
+}
+
 pub type LexResult<T> = result::Result<T, At<LexError>>;
+pub type ParseResult<T> = result::Result<T, At<ParseError>>;
 
 #[derive(Debug, Clone)]
 pub struct At<T> where T: fmt::Debug + Clone {
@@ -59,7 +82,7 @@ impl<T: fmt::Debug + Clone> fmt::Display for At<T> where T: fmt::Display {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct FilePosition {
     /// 0-based line of this position.
     pub line: usize,
