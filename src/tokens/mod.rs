@@ -74,8 +74,8 @@ impl<'a> Iter<'a> {
                     }
                 },
                 LexState::ParamKey => {
-                    let (name, termination) = try!(combinator::expect_terminated_text(&mut self.cursor, self.input, b":"));
-                    self.token(TokenValueRef::Key(str::from_utf8(combinator::trim(name)).unwrap()));
+                    let (contents, termination) = try!(combinator::expect_terminated_text(&mut self.cursor, self.input, b":"));
+                    self.token(TokenValueRef::Key(str::from_utf8(contents.trimmed().slice).unwrap()));
                     match termination {
                         combinator::TermType::EolOrEof => LexState::Eol,
                         combinator::TermType::Sequence => LexState::ParamValue,
@@ -111,15 +111,15 @@ impl<'a> Iter<'a> {
                             expected: self.options.var_end
                         }.at(self.cursor.clone(), self.cursor.clone())),
                         combinator::TermType::Sequence => {
-                            self.token(TokenValueRef::Var(str::from_utf8(combinator::trim(contents)).unwrap()));
+                            self.token(TokenValueRef::Var(str::from_utf8(contents.trimmed().slice).unwrap()));
                             LexState::ContentContinued
                         }
                     }
                 },
                 LexState::ContentContinued => {
                     let (contents, termination) = try!(combinator::expect_terminated_text(&mut self.cursor, self.input, self.options.var_start));
-                    if contents.len() > 0 {
-                        self.token(TokenValueRef::MatchText(str::from_utf8(contents).unwrap()));
+                    if contents.slice.len() > 0 {
+                        self.token(TokenValueRef::MatchText(str::from_utf8(contents.slice).unwrap()));
                     }
                     match termination {
                         combinator::TermType::EolOrEof => LexState::Eol,
