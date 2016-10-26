@@ -24,10 +24,10 @@ pub enum TokenValueRef<'a> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct Options {
-    skip_lines: &'static [u8],
-    marker: &'static [u8],
-    var_start: &'static [u8],
-    var_end: &'static [u8],
+    pub skip_lines: &'static [u8],
+    pub marker: &'static [u8],
+    pub var_start: &'static [u8],
+    pub var_end: &'static [u8],
 }
 
 #[derive(Copy, Clone, Debug)]

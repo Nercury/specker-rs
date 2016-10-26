@@ -39,11 +39,21 @@ impl From<str::Utf8Error> for LexError {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum ParseError {}
+pub enum ParseError {
+    Lex(LexError),
+}
+
+impl From<At<LexError>> for At<ParseError> {
+    fn from(At { lo, hi, desc }: At<LexError>) -> Self {
+        ParseError::Lex(desc).at(lo, hi)
+    }
+}
 
 impl fmt::Display for ParseError {
-    fn fmt(&self, _: &mut fmt::Formatter) -> fmt::Result {
-        match *self {}
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ParseError::Lex(ref e) => e.fmt(f),
+        }
     }
 }
 

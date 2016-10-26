@@ -1,4 +1,6 @@
 use tokens;
+use error::{ParseResult};
+use std::iter::Peekable;
 
 #[derive(Debug, Clone)]
 pub struct Spec<'a> {
@@ -24,6 +26,50 @@ pub enum Match<'a> {
     Var(&'a str),
 }
 
-impl<'a> Spec<'a> {
+pub struct Parser<'s> {
+    token_iter: Peekable<tokens::Iter<'s>>
+}
 
+impl<'s> Parser<'s> {
+    pub fn new(token_iter: Peekable<tokens::Iter<'s>>) -> Parser<'s> {
+        Parser {
+            token_iter: token_iter
+        }
+    }
+
+    pub fn parse_spec(&mut self) -> ParseResult<Spec<'s>> {
+        Ok(Spec { items: vec![] })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokens::{Options, tokenize};
+
+    fn default_options() -> Options {
+        Options {
+            skip_lines: b"..",
+            marker: b"##",
+            var_start: b"${",
+            var_end: b"}"
+        }
+    }
+
+    #[test]
+    fn test_parser() {
+        let mut tokens = tokenize(default_options(), b"## a: x
+..
+Hello ${ X }
+Bye
+..
+## a: y
+${ X } woooo
+${ Y }
+");
+        let mut parser = Parser::new(tokens.peekable());
+        let spec = parser.parse_spec();
+
+        println!("{:?}", spec);
+    }
 }
