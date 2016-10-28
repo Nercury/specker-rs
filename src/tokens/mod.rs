@@ -3,6 +3,7 @@ mod combinator;
 use error::{At, FilePosition, LexError, LexResult};
 use std::collections::VecDeque;
 use std::str;
+use std::fmt;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct TokenRef<'a> {
@@ -20,6 +21,39 @@ pub enum TokenValueRef<'a> {
     MatchAnyNumberOfLines,
     MatchText(&'a str),
     Var(&'a str),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TokenValue {
+    Key(String),
+    Value(String),
+    MatchAnyNumberOfLines,
+    MatchText(String),
+    Var(String),
+}
+
+impl<'a> From<TokenValueRef<'a>> for TokenValue {
+    fn from(other: TokenValueRef<'a>) -> Self {
+        match other {
+            TokenValueRef::Key(s) => TokenValue::Key(s.into()),
+            TokenValueRef::Value(s) => TokenValue::Value(s.into()),
+            TokenValueRef::MatchAnyNumberOfLines => TokenValue::MatchAnyNumberOfLines,
+            TokenValueRef::MatchText(s) => TokenValue::MatchText(s.into()),
+            TokenValueRef::Var(s) => TokenValue::Var(s.into()),
+        }
+    }
+}
+
+impl fmt::Display for TokenValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            TokenValue::Key(_) => "key".fmt(f),
+            TokenValue::Value(_) => "value".fmt(f),
+            TokenValue::MatchAnyNumberOfLines => "match lines".fmt(f),
+            TokenValue::MatchText(_) => "match text".fmt(f),
+            TokenValue::Var(_) => "variable".fmt(f),
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug)]

@@ -1,6 +1,7 @@
 use std::fmt;
 use std::result;
 use std::str;
+use tokens::TokenValue;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum LexError {
@@ -41,6 +42,12 @@ impl From<str::Utf8Error> for LexError {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ParseError {
     Lex(LexError),
+    ExpectedKeyFoundValue,
+    UnexpectedEndOfTokens,
+    ExpectedDifferentToken {
+        expected: TokenValue,
+        found: TokenValue
+    },
 }
 
 impl From<At<LexError>> for At<ParseError> {
@@ -53,6 +60,9 @@ impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ParseError::Lex(ref e) => e.fmt(f),
+            ParseError::ExpectedKeyFoundValue => "Expected key, found value".fmt(f),
+            ParseError::UnexpectedEndOfTokens => "Unexpected end of file".fmt(f),
+            ParseError::ExpectedDifferentToken { ref expected, ref found } => write!(f, "Expected {}, buf found {}", expected, found),
         }
     }
 }
