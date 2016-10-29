@@ -4,19 +4,19 @@ use std::iter::Peekable;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Spec<'a> {
-    items: Vec<Item<'a>>,
+    pub items: Vec<Item<'a>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Item<'a> {
-    params: Vec<Param<'a>>,
-    template: Vec<Match<'a>>,
+    pub params: Vec<Param<'a>>,
+    pub template: Vec<Match<'a>>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Param<'a> {
-    key: &'a str,
-    value: Option<&'a str>,
+    pub key: &'a str,
+    pub value: Option<&'a str>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
