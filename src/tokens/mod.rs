@@ -69,7 +69,7 @@ pub struct Options {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub enum LexState {
+enum LexState {
     LineStart {
         content_line_end: Option<(FilePosition, FilePosition)>
     },
@@ -85,7 +85,7 @@ pub enum LexState {
 }
 
 #[derive(Clone, Debug)]
-pub enum IterState {
+enum IterState {
     Lex(LexState),
     Error(At<LexError>),
     End,
