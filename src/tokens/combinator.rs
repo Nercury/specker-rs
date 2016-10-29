@@ -61,6 +61,10 @@ pub fn check_exact_bytes(cursor: &mut FilePosition, input: &[u8], other: &'stati
     false
 }
 
+pub fn check_eof(cursor: &mut FilePosition, input: &[u8]) -> bool {
+    cursor.byte >= input.len()
+}
+
 pub enum TermType {
     Sequence,
     EolOrEof,

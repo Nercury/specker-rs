@@ -22,6 +22,7 @@ pub struct Param<'a> {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Match<'a> {
     MultipleLines,
+    NewLine,
     Text(&'a str),
     Var(&'a str),
 }
@@ -69,6 +70,7 @@ impl<'s> Parser<'s> {
             items.push(match try!(self.expect_template_token()) {
                 TokenValueRef::MatchAnyNumberOfLines => Match::MultipleLines,
                 TokenValueRef::MatchText(s) => Match::Text(s),
+                TokenValueRef::MatchNewline => Match::NewLine,
                 TokenValueRef::Var(s) => Match::Var(s),
                 _ => break,
             });
@@ -109,6 +111,7 @@ impl<'s> Parser<'s> {
             Some(&Ok(TokenRef { value, .. })) => match value {
                 TokenValueRef::MatchAnyNumberOfLines => true,
                 TokenValueRef::MatchText(_) => true,
+                TokenValueRef::MatchNewline => true,
                 TokenValueRef::Var(_) => true,
                 _ => false,
             }
@@ -141,7 +144,10 @@ impl<'s> Parser<'s> {
     fn expect_template_token(&mut self) -> ParseResult<TokenValueRef<'s>> {
         self.expect_token(|token: TokenValueRef<'s>| {
             match token {
-                TokenValueRef::MatchAnyNumberOfLines | TokenValueRef::MatchText(_) | TokenValueRef::Var(_) => Some(token),
+                TokenValueRef::MatchAnyNumberOfLines
+                | TokenValueRef::MatchText(_)
+                | TokenValueRef::MatchNewline
+                | TokenValueRef::Var(_) => Some(token),
                 _ => None,
             }
         }, || vec![
@@ -222,8 +228,6 @@ ${ Y }
         let mut parser = Parser::new(tokens.peekable());
         let spec = parser.parse_spec();
 
-        println!("{:?}", spec);
-
         assert_eq!(spec.unwrap(), Spec {
             items: vec![
                 Item {
@@ -237,6 +241,7 @@ ${ Y }
                         Match::MultipleLines,
                         Match::Text("Hello "),
                         Match::Var("X"),
+                        Match::NewLine,
                         Match::Text("Bye"),
                         Match::MultipleLines,
                     ],
@@ -255,6 +260,7 @@ ${ Y }
                     template: vec![
                         Match::Var("X"),
                         Match::Text(" woooo"),
+                        Match::NewLine,
                         Match::Var("Y"),
                     ],
                 }
