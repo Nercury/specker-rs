@@ -2,24 +2,24 @@ use tokens::{self, TokenValue, TokenRef, TokenValueRef};
 use error::{FilePosition, ParseError, ParseResult};
 use std::iter::Peekable;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Spec<'a> {
     items: Vec<Item<'a>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Item<'a> {
     params: Vec<Param<'a>>,
     template: Vec<Match<'a>>,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Param<'a> {
     key: &'a str,
-    value: &'a str,
+    value: Option<&'a str>,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Match<'a> {
     MultipleLines,
     Text(&'a str),
@@ -52,7 +52,7 @@ impl<'s> Parser<'s> {
     fn parse_item(&mut self) -> ParseResult<Option<Item<'s>>> {
         let item = Item {
             params: try!(self.parse_params()),
-            template: Vec::new()
+            template: try!(self.parse_template()),
         };
 
         if item.params.is_empty() && item.template.is_empty() {
@@ -60,6 +60,21 @@ impl<'s> Parser<'s> {
         }
 
         Ok(Some(item))
+    }
+
+    fn parse_template(&mut self) -> ParseResult<Vec<Match<'s>>> {
+        let mut items = Vec::new();
+
+        while try!(self.check_next_token_is_template_item()) {
+            items.push(match try!(self.expect_template_token()) {
+                TokenValueRef::MatchAnyNumberOfLines => Match::MultipleLines,
+                TokenValueRef::MatchText(s) => Match::Text(s),
+                TokenValueRef::Var(s) => Match::Var(s),
+                _ => break,
+            });
+        }
+
+        Ok(items)
     }
 
     fn parse_params(&mut self) -> ParseResult<Vec<Param<'s>>> {
@@ -70,18 +85,34 @@ impl<'s> Parser<'s> {
                 None => return Ok(params),
                 Some(v) => v,
             } {
+                let key = try!(self.expect_key());
                 params.push(Param {
-                    key: try!(self.expect_key()),
-                    value: try!(self.expect_value()),
+                    key: key,
+                    value: if try!(self.check_next_token_is_value()) {
+                        Some(try!(self.expect_value()))
+                    } else {
+                        None
+                    },
                 })
             } else {
                 break;
             }
         }
 
-
-
         Ok(params)
+    }
+
+    fn check_next_token_is_template_item(&mut self) -> ParseResult<bool> {
+        Ok(match self.token_iter.peek() {
+            None => false,
+            Some(&Err(ref e)) => return Err(e.clone().into()),
+            Some(&Ok(TokenRef { value, .. })) => match value {
+                TokenValueRef::MatchAnyNumberOfLines => true,
+                TokenValueRef::MatchText(_) => true,
+                TokenValueRef::Var(_) => true,
+                _ => false,
+            }
+        })
     }
 
     fn check_next_token_is_key(&mut self) -> ParseResult<Option<bool>> {
@@ -96,9 +127,53 @@ impl<'s> Parser<'s> {
         })
     }
 
+    fn check_next_token_is_value(&mut self) -> ParseResult<bool> {
+        Ok(match self.token_iter.peek() {
+            None => false,
+            Some(&Err(ref e)) => return Err(e.clone().into()),
+            Some(&Ok(TokenRef { value, .. })) => match value {
+                TokenValueRef::Value(_) => true,
+                _ => false,
+            }
+        })
+    }
+
+    fn expect_template_token(&mut self) -> ParseResult<TokenValueRef<'s>> {
+        self.expect_token(|token: TokenValueRef<'s>| {
+            match token {
+                TokenValueRef::MatchAnyNumberOfLines | TokenValueRef::MatchText(_) | TokenValueRef::Var(_) => Some(token),
+                _ => None,
+            }
+        }, || vec![
+            TokenValue::MatchAnyNumberOfLines,
+            TokenValue::MatchText(String::from("_")),
+            TokenValue::Var(String::from("_"))
+        ])
+    }
+
+    fn expect_key(&mut self) -> ParseResult<&'s str> {
+        self.expect_token(|token: TokenValueRef<'s>| {
+            if let TokenValueRef::Key(s) = token {
+                Some(s)
+            } else {
+                None
+            }
+        }, || vec![TokenValue::Key(String::from("_"))])
+    }
+
+    fn expect_value(&mut self) -> ParseResult<&'s str> {
+        self.expect_token(|token: TokenValueRef<'s>| {
+            if let TokenValueRef::Value(s) = token {
+                Some(s)
+            } else {
+                None
+            }
+        }, || vec![TokenValue::Value(String::from("_"))])
+    }
+
     fn expect_token<F, R, E>(&mut self, match_token: F, expected_token_value: E) -> ParseResult<R> where
         F: Fn(TokenValueRef<'s>) -> Option<R>,
-        E: Fn() -> TokenValue
+        E: Fn() -> Vec<TokenValue>
     {
         match self.token_iter.next() {
             None => Err(ParseError::UnexpectedEndOfTokens.at(self.pos, self.pos)),
@@ -115,26 +190,6 @@ impl<'s> Parser<'s> {
                 }
             }
         }
-    }
-
-    fn expect_key(&mut self) -> ParseResult<&'s str> {
-        self.expect_token(|token: TokenValueRef<'s>| {
-            if let TokenValueRef::Key(s) = token {
-                Some(s)
-            } else {
-                None
-            }
-        }, || TokenValue::Key(String::from("_")))
-    }
-
-    fn expect_value(&mut self) -> ParseResult<&'s str> {
-        self.expect_token(|token: TokenValueRef<'s>| {
-            if let TokenValueRef::Value(s) = token {
-                Some(s)
-            } else {
-                None
-            }
-        }, || TokenValue::Value(String::from("_")))
     }
 }
 
@@ -154,12 +209,13 @@ mod tests {
 
     #[test]
     fn test_parser() {
-        let mut tokens = tokenize(default_options(), b"## a: x
+        let tokens = tokenize(default_options(), b"## a: x
 ..
 Hello ${ X }
 Bye
 ..
 ## a: y
+## bbbb
 ${ X } woooo
 ${ Y }
 ");
@@ -167,5 +223,42 @@ ${ Y }
         let spec = parser.parse_spec();
 
         println!("{:?}", spec);
+
+        assert_eq!(spec.unwrap(), Spec {
+            items: vec![
+                Item {
+                    params: vec![
+                        Param {
+                            key: "a",
+                            value: Some("x"),
+                        }
+                    ],
+                    template: vec![
+                        Match::MultipleLines,
+                        Match::Text("Hello "),
+                        Match::Var("X"),
+                        Match::Text("Bye"),
+                        Match::MultipleLines,
+                    ],
+                },
+                Item {
+                    params: vec![
+                        Param {
+                            key: "a",
+                            value: Some("y"),
+                        },
+                        Param {
+                            key: "bbbb",
+                            value: None,
+                        }
+                    ],
+                    template: vec![
+                        Match::Var("X"),
+                        Match::Text(" woooo"),
+                        Match::Var("Y"),
+                    ],
+                }
+            ],
+        });
     }
 }

@@ -45,7 +45,7 @@ pub enum ParseError {
     ExpectedKeyFoundValue,
     UnexpectedEndOfTokens,
     ExpectedDifferentToken {
-        expected: TokenValue,
+        expected: Vec<TokenValue>,
         found: TokenValue
     },
 }
@@ -62,7 +62,7 @@ impl fmt::Display for ParseError {
             ParseError::Lex(ref e) => e.fmt(f),
             ParseError::ExpectedKeyFoundValue => "Expected key, found value".fmt(f),
             ParseError::UnexpectedEndOfTokens => "Unexpected end of file".fmt(f),
-            ParseError::ExpectedDifferentToken { ref expected, ref found } => write!(f, "Expected {}, buf found {}", expected, found),
+            ParseError::ExpectedDifferentToken { ref expected, ref found } => write!(f, "Expected {}, buf found {}", expected.iter().map(|t| format!("{}", t)).collect::<Vec<_>>().join(" or "), found),
         }
     }
 }
