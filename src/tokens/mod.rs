@@ -71,12 +71,12 @@ pub struct Options {
 #[derive(Copy, Clone, Debug)]
 pub enum LexState {
     LineStart {
-        prev_new_line: Option<(FilePosition, FilePosition)>
+        content_line_end: Option<(FilePosition, FilePosition)>
     },
     ParamKey,
     ParamValue,
     ContentStart {
-        prev_new_line: Option<(FilePosition, FilePosition)>
+        content_line_end: Option<(FilePosition, FilePosition)>
     },
     Var,
     ContentContinued,
@@ -109,11 +109,11 @@ impl<'a> Iter<'a> {
     fn eat_bytes(&mut self, mut state: LexState) -> LexResult<LexState> {
         while self.tokens.is_empty() {
             state = match state {
-                LexState::LineStart { prev_new_line } => {
+                LexState::LineStart { content_line_end } => {
                     if combinator::check_exact_bytes(&mut self.cursor, self.input, self.options.marker) {
                         LexState::ParamKey
                     } else {
-                        LexState::ContentStart { prev_new_line: prev_new_line }
+                        LexState::ContentStart { content_line_end: content_line_end }
                     }
                 },
                 LexState::ParamKey => {
@@ -134,12 +134,12 @@ impl<'a> Iter<'a> {
                     self.token(TokenValueRef::Value(str::from_utf8(name.slice).unwrap()), name.lo, name.hi);
                     LexState::Eol
                 },
-                LexState::ContentStart { prev_new_line } => {
+                LexState::ContentStart { content_line_end } => {
                     if combinator::check_exact_bytes(&mut self.cursor, self.input, self.options.skip_lines) {
                         let pos = self.cursor.clone();
                         if combinator::check_new_line(&mut self.cursor, self.input) {
                             self.token(TokenValueRef::MatchAnyNumberOfLines, pos, pos);
-                            LexState::LineStart { prev_new_line: None }
+                            LexState::LineStart { content_line_end: None }
                         } else {
                             if self.cursor.byte == self.input.len() {
                                 self.token(TokenValueRef::MatchAnyNumberOfLines, pos, pos);
@@ -149,7 +149,7 @@ impl<'a> Iter<'a> {
                             }
                         }
                     } else {
-                        if let Some((new_line_start, new_line_end)) = prev_new_line {
+                        if let Some((new_line_start, new_line_end)) = content_line_end {
                             if !combinator::check_eof(&mut self.cursor, self.input) {
                                 self.token(TokenValueRef::MatchNewline, new_line_start, new_line_end);
                             }
@@ -188,14 +188,14 @@ impl<'a> Iter<'a> {
                 LexState::ContentEol => {
                     let lo = self.cursor.clone();
                     if combinator::check_new_line(&mut self.cursor, self.input) {
-                        LexState::LineStart { prev_new_line: Some((lo, self.cursor.clone())) }
+                        LexState::LineStart { content_line_end: Some((lo, self.cursor.clone())) }
                     } else {
                         break;
                     }
                 },
                 LexState::Eol => {
                     if combinator::check_new_line(&mut self.cursor, self.input) {
-                        LexState::LineStart { prev_new_line: None }
+                        LexState::LineStart { content_line_end: None }
                     } else {
                         break;
                     }
@@ -248,7 +248,7 @@ impl<'a> Iterator for Iter<'a> {
 pub fn tokenize<'a>(options: Options, input: &'a [u8]) -> Iter<'a> {
     Iter {
         options: options,
-        state: IterState::Lex(LexState::LineStart { prev_new_line: None }),
+        state: IterState::Lex(LexState::LineStart { content_line_end: None }),
         tokens: VecDeque::new(),
         cursor: FilePosition::new(),
         input: input,
