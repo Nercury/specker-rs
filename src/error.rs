@@ -12,6 +12,16 @@ pub enum LexError {
     Utf8(str::Utf8Error),
 }
 
+impl ::std::error::Error for LexError {
+    fn description(&self) -> &str {
+        match *self {
+            LexError::ExpectedSequenceFoundNewline { .. } => "expected sequence, found newline",
+            LexError::ExpectedNewline => "expected newline",
+            LexError::Utf8(ref e) => e.description(),
+        }
+    }
+}
+
 impl fmt::Display for LexError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
@@ -48,6 +58,17 @@ pub enum ParseError {
         expected: Vec<TokenValue>,
         found: TokenValue
     },
+}
+
+impl ::std::error::Error for ParseError {
+    fn description(&self) -> &str {
+        match *self {
+            ParseError::Lex(ref e) => e.description(),
+            ParseError::ExpectedKeyFoundValue => "expected key, found value",
+            ParseError::UnexpectedEndOfTokens => "unexpected end of tokens",
+            ParseError::ExpectedDifferentToken { .. } => "expected different token",
+        }
+    }
 }
 
 impl From<At<LexError>> for At<ParseError> {
@@ -88,6 +109,12 @@ pub struct At<T> where T: fmt::Debug + Clone {
     pub hi: FilePosition,
     /// An inner error.
     pub desc: T,
+}
+
+impl<T: fmt::Debug + Clone> ::std::error::Error for At<T> where T: ::std::error::Error {
+    fn description(&self) -> &str {
+        self.desc.description()
+    }
 }
 
 impl<T: fmt::Debug + Clone> PartialEq for At<T> where T: Eq + PartialEq {

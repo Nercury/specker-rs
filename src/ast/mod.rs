@@ -1,30 +1,142 @@
 use tokens::{self, TokenValue, TokenRef, TokenValueRef};
 use error::{FilePosition, ParseError, ParseResult};
+use std::collections::HashMap;
+use std::result;
 use std::iter::Peekable;
+use std::path;
+use std::fmt;
+use std::fs::{File, DirBuilder};
+use std::io::Write;
+use std::borrow::Cow;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Spec<'a> {
-    pub items: Vec<Item<'a>>,
+pub struct Spec {
+    pub items: Vec<Item>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Item<'a> {
-    pub params: Vec<Param<'a>>,
-    pub template: Vec<Match<'a>>,
+pub struct Item {
+    pub params: Vec<Param>,
+    pub template: Vec<Match>,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub struct Param<'a> {
-    pub key: &'a str,
-    pub value: Option<&'a str>,
+#[derive(Debug)]
+pub enum TemplateWriteError {
+    CanNotWriteMatchAnySymbols,
+    MissingParam(String),
+    PathMustBeFile(String),
+    Io(::std::io::Error),
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum Match<'a> {
+impl ::std::error::Error for TemplateWriteError {
+    fn description(&self) -> &str {
+        match *self {
+            TemplateWriteError::CanNotWriteMatchAnySymbols => "can not write template symbol to match any lines",
+            TemplateWriteError::MissingParam(_) => "missing template param",
+            TemplateWriteError::PathMustBeFile(_) => "path must be a file",
+            TemplateWriteError::Io(ref e) => e.description(),
+        }
+    }
+}
+
+impl fmt::Display for TemplateWriteError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            TemplateWriteError::CanNotWriteMatchAnySymbols => "Can not write template symbol to match any lines".fmt(f),
+            TemplateWriteError::MissingParam(ref p) => write!(f, "Missing template param {:?}", p),
+            TemplateWriteError::PathMustBeFile(ref p) => write!(f, "Path to template output file {:?} must be a file", p),
+            TemplateWriteError::Io(ref e) => e.fmt(f),
+        }
+    }
+}
+
+impl From<::std::io::Error> for TemplateWriteError {
+    fn from(other: ::std::io::Error) -> Self {
+        TemplateWriteError::Io(other)
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn universal_path_to_platform_path(universal: &str) -> Cow<str> {
+    Cow::Borrowed(universal)
+}
+
+#[cfg(target_os = "windows")]
+fn universal_path_to_platform_path(universal: &str) -> Cow<str> {
+    Cow::Owned(s.chars()
+        .map(|c| if c == '/' {
+            '\\'
+        } else {
+            c
+        })
+        .collect::<String>())
+}
+
+impl Item {
+    /// Finds a first param in params list that has specified key and contains a value.
+    pub fn get_param<'a, 'r>(&'r self, key: &'a str) -> Option<&'r str> {
+        for p in self.params.iter() {
+            if p.key == key {
+                match p.value {
+                    Some(ref v) => return Some(&v[..]),
+                    None => continue,
+                }
+            }
+        }
+        None
+    }
+
+    /// Writes template contents to specified path.
+    pub fn write_file(&self, path: &path::Path, params: &HashMap<&str, &str>)
+                      -> result::Result<(), TemplateWriteError> {
+        for s in &self.template {
+            match *s {
+                Match::MultipleLines =>
+                    return Err(TemplateWriteError::CanNotWriteMatchAnySymbols),
+                Match::Var(ref key) if !params.contains_key(&key[..]) =>
+                    return Err(TemplateWriteError::MissingParam(key.to_owned())),
+                _ => continue,
+            }
+        }
+
+        match path.parent() {
+            Some(parent) => try!(DirBuilder::new().recursive(true).create(parent)),
+            None => return Err(TemplateWriteError::PathMustBeFile(format!("{:?}", path))),
+        }
+
+        let mut f = try!(File::create(path));
+        try!(f.write_all(b"Hello, world!"));
+
+        Ok(())
+    }
+
+    /// Writes template contents to a file path constructed by joining the specified base path
+    /// and relative path in universal format. "Universal" here means that on windows "some/path"
+    /// is converted to "some\path".
+    pub fn write_file_relative(&self, base_path: &path::Path, universal_relative_path: &str, params: &HashMap<&str, &str>)
+                               -> result::Result<(), TemplateWriteError> {
+        self.write_file(
+            &base_path.join(
+                universal_path_to_platform_path(universal_relative_path)
+                    .as_ref()
+            ),
+            params
+        )
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Param {
+    pub key: String,
+    pub value: Option<String>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Match {
     MultipleLines,
     NewLine,
-    Text(&'a str),
-    Var(&'a str),
+    Text(String),
+    Var(String),
 }
 
 pub struct Parser<'s> {
@@ -40,7 +152,7 @@ impl<'s> Parser<'s> {
         }
     }
 
-    pub fn parse_spec(&mut self) -> ParseResult<Spec<'s>> {
+    pub fn parse_spec(&mut self) -> ParseResult<Spec> {
         let mut items = Vec::new();
 
         while let Some(item) = try!(self.parse_item()) {
@@ -50,7 +162,7 @@ impl<'s> Parser<'s> {
         Ok(Spec { items: items })
     }
 
-    fn parse_item(&mut self) -> ParseResult<Option<Item<'s>>> {
+    fn parse_item(&mut self) -> ParseResult<Option<Item>> {
         let item = Item {
             params: try!(self.parse_params()),
             template: try!(self.parse_template()),
@@ -63,15 +175,15 @@ impl<'s> Parser<'s> {
         Ok(Some(item))
     }
 
-    fn parse_template(&mut self) -> ParseResult<Vec<Match<'s>>> {
+    fn parse_template(&mut self) -> ParseResult<Vec<Match>> {
         let mut items = Vec::new();
 
         while try!(self.check_next_token_is_template_item()) {
             items.push(match try!(self.expect_template_token()) {
                 TokenValueRef::MatchAnyNumberOfLines => Match::MultipleLines,
-                TokenValueRef::MatchText(s) => Match::Text(s),
+                TokenValueRef::MatchText(s) => Match::Text(s.into()),
                 TokenValueRef::MatchNewline => Match::NewLine,
-                TokenValueRef::Var(s) => Match::Var(s),
+                TokenValueRef::Var(s) => Match::Var(s.into()),
                 _ => break,
             });
         }
@@ -79,7 +191,7 @@ impl<'s> Parser<'s> {
         Ok(items)
     }
 
-    fn parse_params(&mut self) -> ParseResult<Vec<Param<'s>>> {
+    fn parse_params(&mut self) -> ParseResult<Vec<Param>> {
         let mut params = Vec::new();
 
         loop {
@@ -89,9 +201,9 @@ impl<'s> Parser<'s> {
             } {
                 let key = try!(self.expect_key());
                 params.push(Param {
-                    key: key,
+                    key: key.into(),
                     value: if try!(self.check_next_token_is_value()) {
-                        Some(try!(self.expect_value()))
+                        Some(try!(self.expect_value()).into())
                     } else {
                         None
                     },
@@ -151,9 +263,9 @@ impl<'s> Parser<'s> {
                 _ => None,
             }
         }, || vec![
-            TokenValue::MatchAnyNumberOfLines,
-            TokenValue::MatchText(String::from("_")),
-            TokenValue::Var(String::from("_"))
+        TokenValue::MatchAnyNumberOfLines,
+        TokenValue::MatchText(String::from("_")),
+        TokenValue::Var(String::from("_"))
         ])
     }
 
@@ -230,40 +342,40 @@ ${ Y }
 
         assert_eq!(spec.unwrap(), Spec {
             items: vec![
-                Item {
-                    params: vec![
-                        Param {
-                            key: "a",
-                            value: Some("x"),
-                        }
-                    ],
-                    template: vec![
-                        Match::MultipleLines,
-                        Match::Text("Hello "),
-                        Match::Var("X"),
-                        Match::NewLine,
-                        Match::Text("Bye"),
-                        Match::MultipleLines,
-                    ],
-                },
-                Item {
-                    params: vec![
-                        Param {
-                            key: "a",
-                            value: Some("y"),
-                        },
-                        Param {
-                            key: "bbbb",
-                            value: None,
-                        }
-                    ],
-                    template: vec![
-                        Match::Var("X"),
-                        Match::Text(" woooo"),
-                        Match::NewLine,
-                        Match::Var("Y"),
-                    ],
+            Item {
+                params: vec![
+                Param {
+                    key: "a",
+                    value: Some("x"),
                 }
+                ],
+                template: vec![
+                Match::MultipleLines,
+                Match::Text("Hello "),
+                Match::Var("X"),
+                Match::NewLine,
+                Match::Text("Bye"),
+                Match::MultipleLines,
+                ],
+            },
+            Item {
+                params: vec![
+                Param {
+                    key: "a",
+                    value: Some("y"),
+                },
+                Param {
+                    key: "bbbb",
+                    value: None,
+                }
+                ],
+                template: vec![
+                Match::Var("X"),
+                Match::Text(" woooo"),
+                Match::NewLine,
+                Match::Var("Y"),
+                ],
+            }
             ],
         });
     }
