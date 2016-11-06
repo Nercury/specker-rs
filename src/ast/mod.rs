@@ -1,13 +1,6 @@
 use tokens::{self, TokenValue, TokenRef, TokenValueRef};
 use error::{FilePosition, ParseError, ParseResult};
-use std::collections::HashMap;
-use std::result;
 use std::iter::Peekable;
-use std::path;
-use std::fmt;
-use std::fs::{File, DirBuilder};
-use std::io::Write;
-use std::borrow::Cow;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Spec {
@@ -18,111 +11,6 @@ pub struct Spec {
 pub struct Item {
     pub params: Vec<Param>,
     pub template: Vec<Match>,
-}
-
-#[derive(Debug)]
-pub enum TemplateWriteError {
-    CanNotWriteMatchAnySymbols,
-    MissingParam(String),
-    PathMustBeFile(String),
-    Io(::std::io::Error),
-}
-
-impl ::std::error::Error for TemplateWriteError {
-    fn description(&self) -> &str {
-        match *self {
-            TemplateWriteError::CanNotWriteMatchAnySymbols => "can not write template symbol to match any lines",
-            TemplateWriteError::MissingParam(_) => "missing template param",
-            TemplateWriteError::PathMustBeFile(_) => "path must be a file",
-            TemplateWriteError::Io(ref e) => e.description(),
-        }
-    }
-}
-
-impl fmt::Display for TemplateWriteError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            TemplateWriteError::CanNotWriteMatchAnySymbols => "Can not write template symbol to match any lines".fmt(f),
-            TemplateWriteError::MissingParam(ref p) => write!(f, "Missing template param {:?}", p),
-            TemplateWriteError::PathMustBeFile(ref p) => write!(f, "Path to template output file {:?} must be a file", p),
-            TemplateWriteError::Io(ref e) => e.fmt(f),
-        }
-    }
-}
-
-impl From<::std::io::Error> for TemplateWriteError {
-    fn from(other: ::std::io::Error) -> Self {
-        TemplateWriteError::Io(other)
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-fn universal_path_to_platform_path(universal: &str) -> Cow<str> {
-    Cow::Borrowed(universal)
-}
-
-#[cfg(target_os = "windows")]
-fn universal_path_to_platform_path(universal: &str) -> Cow<str> {
-    Cow::Owned(s.chars()
-        .map(|c| if c == '/' {
-            '\\'
-        } else {
-            c
-        })
-        .collect::<String>())
-}
-
-impl Item {
-    /// Finds a first param in params list that has specified key and contains a value.
-    pub fn get_param<'a, 'r>(&'r self, key: &'a str) -> Option<&'r str> {
-        for p in self.params.iter() {
-            if p.key == key {
-                match p.value {
-                    Some(ref v) => return Some(&v[..]),
-                    None => continue,
-                }
-            }
-        }
-        None
-    }
-
-    /// Writes template contents to specified path.
-    pub fn write_file(&self, path: &path::Path, params: &HashMap<&str, &str>)
-                      -> result::Result<(), TemplateWriteError> {
-        for s in &self.template {
-            match *s {
-                Match::MultipleLines =>
-                    return Err(TemplateWriteError::CanNotWriteMatchAnySymbols),
-                Match::Var(ref key) if !params.contains_key(&key[..]) =>
-                    return Err(TemplateWriteError::MissingParam(key.to_owned())),
-                _ => continue,
-            }
-        }
-
-        match path.parent() {
-            Some(parent) => try!(DirBuilder::new().recursive(true).create(parent)),
-            None => return Err(TemplateWriteError::PathMustBeFile(format!("{:?}", path))),
-        }
-
-        let mut f = try!(File::create(path));
-        try!(f.write_all(b"Hello, world!"));
-
-        Ok(())
-    }
-
-    /// Writes template contents to a file path constructed by joining the specified base path
-    /// and relative path in universal format. "Universal" here means that on windows "some/path"
-    /// is converted to "some\path".
-    pub fn write_file_relative(&self, base_path: &path::Path, universal_relative_path: &str, params: &HashMap<&str, &str>)
-                               -> result::Result<(), TemplateWriteError> {
-        self.write_file(
-            &base_path.join(
-                universal_path_to_platform_path(universal_relative_path)
-                    .as_ref()
-            ),
-            params
-        )
-    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

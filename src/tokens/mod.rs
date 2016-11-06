@@ -4,6 +4,7 @@ use error::{At, FilePosition, LexError, LexResult};
 use std::collections::VecDeque;
 use std::str;
 use std::fmt;
+use spec;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct TokenRef<'a> {
@@ -61,11 +62,22 @@ impl fmt::Display for TokenValue {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct Options {
-    pub skip_lines: &'static [u8],
-    pub marker: &'static [u8],
-    pub var_start: &'static [u8],
-    pub var_end: &'static [u8],
+pub struct Options<'a> {
+    pub skip_lines: &'a [u8],
+    pub marker: &'a [u8],
+    pub var_start: &'a [u8],
+    pub var_end: &'a [u8],
+}
+
+impl<'a> From<spec::Options<'a>> for Options<'a> {
+    fn from(other: spec::Options<'a>) -> Options<'a> {
+        Options {
+            skip_lines: other.skip_lines.as_bytes(),
+            marker: other.marker.as_bytes(),
+            var_start: other.var_start.as_bytes(),
+            var_end: other.var_end.as_bytes(),
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -93,7 +105,7 @@ enum IterState {
 
 #[derive(Clone, Debug)]
 pub struct Iter<'a> {
-    options: Options,
+    options: Options<'a>,
     state: IterState,
     tokens: VecDeque<TokenRef<'a>>,
     cursor: FilePosition,
@@ -162,7 +174,7 @@ impl<'a> Iter<'a> {
                         &mut self.cursor, self.input, self.options.var_end));
                     match termination {
                         combinator::TermType::EolOrEof => return Err(LexError::ExpectedSequenceFoundNewline {
-                            expected: self.options.var_end
+                            expected: self.options.var_end.into()
                         }.at(self.cursor.clone(), self.cursor.clone())),
                         combinator::TermType::Sequence => {
                             let trimmed = contents.trimmed();
@@ -245,7 +257,7 @@ impl<'a> Iterator for Iter<'a> {
     }
 }
 
-pub fn tokenize<'a>(options: Options, input: &'a [u8]) -> Iter<'a> {
+pub fn tokenize<'a>(options: Options<'a>, input: &'a [u8]) -> Iter<'a> {
     Iter {
         options: options,
         state: IterState::Lex(LexState::LineStart { content_line_end: None }),
@@ -261,7 +273,7 @@ mod tests {
 
     use super::*;
 
-    fn default_options() -> Options {
+    fn default_options() -> Options<'static> {
         Options {
             skip_lines: b"..",
             marker: b"##",

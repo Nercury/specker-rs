@@ -1,12 +1,71 @@
 use std::fmt;
 use std::result;
 use std::str;
+use std::io;
+use std::path;
 use tokens::TokenValue;
+use walkdir;
+
+#[derive(Debug)]
+pub enum Error {
+    WalkDir(walkdir::Error),
+    Io(io::Error),
+    StripPrefixError(path::StripPrefixError),
+    Parse(At<ParseError>),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Error::WalkDir(ref e) => e.fmt(f),
+            Error::Io(ref e) => e.fmt(f),
+            Error::StripPrefixError(ref e) => e.fmt(f),
+            Error::Parse(ref e) => e.fmt(f),
+        }
+    }
+}
+
+impl ::std::error::Error for Error {
+    fn description(&self) -> &str {
+        match *self {
+            Error::WalkDir(ref e) => e.description(),
+            Error::Io(ref e) => e.description(),
+            Error::StripPrefixError(ref e) => e.description(),
+            Error::Parse(ref e) => e.description(),
+        }
+    }
+}
+
+impl From<walkdir::Error> for Error {
+    fn from(other: walkdir::Error) -> Error {
+        Error::WalkDir(other)
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(other: io::Error) -> Error {
+        Error::Io(other)
+    }
+}
+
+impl From<path::StripPrefixError> for Error {
+    fn from(other: path::StripPrefixError) -> Error {
+        Error::StripPrefixError(other)
+    }
+}
+
+impl From<At<ParseError>> for Error {
+    fn from(other: At<ParseError>) -> Error {
+        Error::Parse(other)
+    }
+}
+
+pub type Result<T> = result::Result<T, Error>;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum LexError {
     ExpectedSequenceFoundNewline {
-        expected: &'static [u8],
+        expected: Vec<u8>,
     },
     ExpectedNewline,
     Utf8(str::Utf8Error),
@@ -95,6 +154,42 @@ impl ParseError {
             hi: hi,
             desc: self,
         }
+    }
+}
+
+#[derive(Debug)]
+pub enum TemplateWriteError {
+    CanNotWriteMatchAnySymbols,
+    MissingParam(String),
+    PathMustBeFile(String),
+    Io(::std::io::Error),
+}
+
+impl ::std::error::Error for TemplateWriteError {
+    fn description(&self) -> &str {
+        match *self {
+            TemplateWriteError::CanNotWriteMatchAnySymbols => "can not write template symbol to match any lines",
+            TemplateWriteError::MissingParam(_) => "missing template param",
+            TemplateWriteError::PathMustBeFile(_) => "path must be a file",
+            TemplateWriteError::Io(ref e) => e.description(),
+        }
+    }
+}
+
+impl fmt::Display for TemplateWriteError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            TemplateWriteError::CanNotWriteMatchAnySymbols => "Can not write template symbol to match any lines".fmt(f),
+            TemplateWriteError::MissingParam(ref p) => write!(f, "Missing template param {:?}", p),
+            TemplateWriteError::PathMustBeFile(ref p) => write!(f, "Path to template output file {:?} must be a file", p),
+            TemplateWriteError::Io(ref e) => e.fmt(f),
+        }
+    }
+}
+
+impl From<::std::io::Error> for TemplateWriteError {
+    fn from(other: ::std::io::Error) -> Self {
+        TemplateWriteError::Io(other)
     }
 }
 

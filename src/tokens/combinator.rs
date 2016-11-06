@@ -53,7 +53,7 @@ pub fn check_new_line(cursor: &mut FilePosition, input: &[u8]) -> bool {
     return false;
 }
 
-pub fn check_exact_bytes(cursor: &mut FilePosition, input: &[u8], other: &'static [u8]) -> bool {
+pub fn check_exact_bytes<'e>(cursor: &mut FilePosition, input: &[u8], other: &'e [u8]) -> bool {
     if input[cursor.byte..].starts_with(other) {
         cursor.advance(other.len());
         return true;
@@ -85,7 +85,7 @@ pub fn expect_text<'a>(cursor: &mut FilePosition, input: &'a [u8]) -> LexResult<
     return Ok(Contents::new(input, start_cursor, *cursor));
 }
 
-pub fn expect_terminated_text<'a>(cursor: &mut FilePosition, input: &'a [u8], term_sequence: &'static [u8]) -> LexResult<(Contents<'a>, TermType)> {
+pub fn expect_terminated_text<'a, 'e>(cursor: &mut FilePosition, input: &'a [u8], term_sequence: &'e [u8]) -> LexResult<(Contents<'a>, TermType)> {
     let start_cursor = cursor.clone();
     let mut end = start_cursor.byte;
     loop {
