@@ -3,10 +3,10 @@ use std::collections::HashMap;
 use std::result;
 use std::path;
 use std::fs::{File, DirBuilder};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::borrow::Cow;
 use std::slice;
-use error::{TemplateWriteError, Result};
+use error::{TemplateWriteError, FileMatchError, Result};
 use ast;
 use tokens;
 
@@ -100,12 +100,35 @@ impl<'s> Item<'s> {
         Ok(())
     }
 
+    pub fn match_file(&'s self, path: &path::Path, params: &HashMap<&str, &str>)
+                      -> result::Result<(), FileMatchError>
+    {
+        let mut file_contents = String::new();
+        let mut file = File::open(path)?;
+        file.read_to_string(&mut file_contents)?;
+
+        println!("FILE {:?}", file_contents);
+
+        Ok(())
+    }
+
     /// Writes template contents to a file path constructed by joining the specified base path
     /// and relative path in universal format. "Universal" here means that on windows "some/path"
     /// is converted to "some\path".
     pub fn write_file_relative(&'s self, base_path: &path::Path, universal_relative_path: &str, params: &HashMap<&str, &str>)
                                -> result::Result<(), TemplateWriteError> {
         self.write_file(
+            &base_path.join(
+                universal_path_to_platform_path(universal_relative_path)
+                    .as_ref()
+            ),
+            params
+        )
+    }
+
+    pub fn match_file_relative(&'s self, base_path: &path::Path, universal_relative_path: &str, params: &HashMap<&str, &str>)
+                               -> result::Result<(), FileMatchError> {
+        self.match_file(
             &base_path.join(
                 universal_path_to_platform_path(universal_relative_path)
                     .as_ref()

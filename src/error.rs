@@ -193,6 +193,39 @@ impl From<::std::io::Error> for TemplateWriteError {
     }
 }
 
+#[derive(Debug)]
+pub enum FileMatchError {
+    MissingParam(String),
+    PathMustBeFile(String),
+    Io(::std::io::Error),
+}
+
+impl ::std::error::Error for FileMatchError {
+    fn description(&self) -> &str {
+        match *self {
+            FileMatchError::MissingParam(_) => "missing template param",
+            FileMatchError::PathMustBeFile(_) => "path must be a file",
+            FileMatchError::Io(ref e) => e.description(),
+        }
+    }
+}
+
+impl fmt::Display for FileMatchError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            FileMatchError::MissingParam(ref p) => write!(f, "Missing template param {:?}", p),
+            FileMatchError::PathMustBeFile(ref p) => write!(f, "Path {:?} must be a file", p),
+            FileMatchError::Io(ref e) => e.fmt(f),
+        }
+    }
+}
+
+impl From<::std::io::Error> for FileMatchError {
+    fn from(other: ::std::io::Error) -> Self {
+        FileMatchError::Io(other)
+    }
+}
+
 pub type LexResult<T> = result::Result<T, At<LexError>>;
 pub type ParseResult<T> = result::Result<T, At<ParseError>>;
 

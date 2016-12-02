@@ -204,7 +204,7 @@ mod tests {
     use super::*;
     use tokens::{Options, tokenize};
 
-    fn default_options() -> Options {
+    fn default_options() -> Options<'static> {
         Options {
             skip_lines: b"..",
             marker: b"##",
@@ -233,35 +233,35 @@ ${ Y }
             Item {
                 params: vec![
                 Param {
-                    key: "a",
-                    value: Some("x"),
+                    key: "a".into(),
+                    value: Some("x".into()),
                 }
                 ],
                 template: vec![
                 Match::MultipleLines,
-                Match::Text("Hello "),
-                Match::Var("X"),
+                Match::Text("Hello ".into()),
+                Match::Var("X".into()),
                 Match::NewLine,
-                Match::Text("Bye"),
+                Match::Text("Bye".into()),
                 Match::MultipleLines,
                 ],
             },
             Item {
                 params: vec![
                 Param {
-                    key: "a",
-                    value: Some("y"),
+                    key: "a".into(),
+                    value: Some("y".into()),
                 },
                 Param {
-                    key: "bbbb",
+                    key: "bbbb".into(),
                     value: None,
                 }
                 ],
                 template: vec![
-                Match::Var("X"),
-                Match::Text(" woooo"),
+                Match::Var("X".into()),
+                Match::Text(" woooo".into()),
                 Match::NewLine,
-                Match::Var("Y"),
+                Match::Var("Y".into()),
                 ],
             }
             ],
