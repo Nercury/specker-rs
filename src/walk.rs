@@ -35,8 +35,8 @@ impl<'a> SpecWalkIter<'a> {
     fn process_entry(&mut self, entry: &walkdir::DirEntry) -> Result<Spec> {
         let path = entry.path();
         let mut contents = String::new();
-        try!(try!(File::open(path)).read_to_string(&mut contents));
-        Spec::parse(self.options, try!(path.strip_prefix(&self.base)), contents.as_bytes())
+        File::open(path)?.read_to_string(&mut contents)?;
+        Spec::parse(self.options, path.strip_prefix(&self.base)?, contents.as_bytes())
     }
 }
 

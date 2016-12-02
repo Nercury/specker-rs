@@ -129,7 +129,7 @@ impl<'a> Iter<'a> {
                     }
                 },
                 LexState::ParamKey => {
-                    let (contents, termination) = try!(combinator::expect_terminated_text(&mut self.cursor, self.input, b":"));
+                    let (contents, termination) = combinator::expect_terminated_text(&mut self.cursor, self.input, b":")?;
                     let trimmed = contents.trimmed();
                     self.token(
                         TokenValueRef::Key(str::from_utf8(trimmed.slice).unwrap()),
@@ -142,7 +142,7 @@ impl<'a> Iter<'a> {
                     }
                 },
                 LexState::ParamValue => {
-                    let name = try!(combinator::expect_text(&mut self.cursor, self.input)).trimmed();
+                    let name = combinator::expect_text(&mut self.cursor, self.input)?.trimmed();
                     self.token(TokenValueRef::Value(str::from_utf8(name.slice).unwrap()), name.lo, name.hi);
                     LexState::Eol
                 },
@@ -170,8 +170,8 @@ impl<'a> Iter<'a> {
                     }
                 },
                 LexState::Var => {
-                    let (contents, termination) = try!(combinator::expect_terminated_text(
-                        &mut self.cursor, self.input, self.options.var_end));
+                    let (contents, termination) = combinator::expect_terminated_text(
+                        &mut self.cursor, self.input, self.options.var_end)?;
                     match termination {
                         combinator::TermType::EolOrEof => return Err(LexError::ExpectedSequenceFoundNewline {
                             expected: self.options.var_end.into()
@@ -184,7 +184,7 @@ impl<'a> Iter<'a> {
                     }
                 },
                 LexState::ContentContinued => {
-                    let (contents, termination) = try!(combinator::expect_terminated_text(&mut self.cursor, self.input, self.options.var_start));
+                    let (contents, termination) = combinator::expect_terminated_text(&mut self.cursor, self.input, self.options.var_start)?;
                     if contents.slice.len() > 0 {
                         self.token(
                             TokenValueRef::MatchText(str::from_utf8(contents.slice).unwrap()),

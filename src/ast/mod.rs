@@ -43,7 +43,7 @@ impl<'s> Parser<'s> {
     pub fn parse_spec(&mut self) -> ParseResult<Spec> {
         let mut items = Vec::new();
 
-        while let Some(item) = try!(self.parse_item()) {
+        while let Some(item) = self.parse_item()? {
             items.push(item);
         }
 
@@ -52,8 +52,8 @@ impl<'s> Parser<'s> {
 
     fn parse_item(&mut self) -> ParseResult<Option<Item>> {
         let item = Item {
-            params: try!(self.parse_params()),
-            template: try!(self.parse_template()),
+            params: self.parse_params()?,
+            template: self.parse_template()?,
         };
 
         if item.params.is_empty() && item.template.is_empty() {
@@ -66,8 +66,8 @@ impl<'s> Parser<'s> {
     fn parse_template(&mut self) -> ParseResult<Vec<Match>> {
         let mut items = Vec::new();
 
-        while try!(self.check_next_token_is_template_item()) {
-            items.push(match try!(self.expect_template_token()) {
+        while self.check_next_token_is_template_item()? {
+            items.push(match self.expect_template_token()? {
                 TokenValueRef::MatchAnyNumberOfLines => Match::MultipleLines,
                 TokenValueRef::MatchText(s) => Match::Text(s.into()),
                 TokenValueRef::MatchNewline => Match::NewLine,
@@ -83,15 +83,15 @@ impl<'s> Parser<'s> {
         let mut params = Vec::new();
 
         loop {
-            if match try!(self.check_next_token_is_key()) {
+            if match self.check_next_token_is_key()? {
                 None => return Ok(params),
                 Some(v) => v,
             } {
-                let key = try!(self.expect_key());
+                let key = self.expect_key()?;
                 params.push(Param {
                     key: key.into(),
-                    value: if try!(self.check_next_token_is_value()) {
-                        Some(try!(self.expect_value()).into())
+                    value: if self.check_next_token_is_value()? {
+                        Some(self.expect_value()?.into())
                     } else {
                         None
                     },

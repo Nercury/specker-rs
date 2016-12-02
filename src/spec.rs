@@ -39,7 +39,7 @@ impl Spec {
     pub fn parse<'a>(options: Options<'a>, rel_path: &'a Path, contents: &'a [u8]) -> Result<Spec> {
         Ok(Spec {
             rel_path: rel_path.into(),
-            ast: try!(ast::Parser::new(tokens::tokenize(options.into(), contents).peekable()).parse_spec())
+            ast: ast::Parser::new(tokens::tokenize(options.into(), contents).peekable()).parse_spec()?
         })
     }
 
@@ -90,12 +90,12 @@ impl<'s> Item<'s> {
         }
 
         match path.parent() {
-            Some(parent) => try!(DirBuilder::new().recursive(true).create(parent)),
+            Some(parent) => DirBuilder::new().recursive(true).create(parent)?,
             None => return Err(TemplateWriteError::PathMustBeFile(format!("{:?}", path))),
         }
 
-        let mut f = try!(File::create(path));
-        try!(f.write_all(b"Hello, world!"));
+        let mut f = File::create(path)?;
+        f.write_all(b"Hello, world!")?;
 
         Ok(())
     }
