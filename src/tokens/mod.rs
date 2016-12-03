@@ -132,7 +132,8 @@ impl<'a> Iter<'a> {
                     let (contents, termination) = combinator::expect_terminated_text(&mut self.cursor, self.input, b":")?;
                     let trimmed = contents.trimmed();
                     self.token(
-                        TokenValueRef::Key(str::from_utf8(trimmed.slice).unwrap()),
+                        TokenValueRef::Key(str::from_utf8(trimmed.slice)
+                            .map_err(|e| LexError::from(e).at(trimmed.lo, trimmed.hi))?),
                         trimmed.lo,
                         trimmed.hi
                     );
@@ -143,7 +144,10 @@ impl<'a> Iter<'a> {
                 },
                 LexState::ParamValue => {
                     let name = combinator::expect_text(&mut self.cursor, self.input)?.trimmed();
-                    self.token(TokenValueRef::Value(str::from_utf8(name.slice).unwrap()), name.lo, name.hi);
+                    self.token(TokenValueRef::Value(
+                        str::from_utf8(name.slice)
+                            .map_err(|e| LexError::from(e).at(name.lo, name.hi))?
+                    ), name.lo, name.hi);
                     LexState::Eol
                 },
                 LexState::ContentStart { content_line_end } => {
@@ -178,7 +182,10 @@ impl<'a> Iter<'a> {
                         }.at(self.cursor.clone(), self.cursor.clone())),
                         combinator::TermType::Sequence => {
                             let trimmed = contents.trimmed();
-                            self.token(TokenValueRef::Var(str::from_utf8(trimmed.slice).unwrap()), trimmed.lo, trimmed.hi);
+                            self.token(TokenValueRef::Var(
+                                str::from_utf8(trimmed.slice)
+                                    .map_err(|e| LexError::from(e).at(trimmed.lo, trimmed.hi))?
+                            ), trimmed.lo, trimmed.hi);
                             LexState::ContentContinued
                         }
                     }
@@ -187,7 +194,10 @@ impl<'a> Iter<'a> {
                     let (contents, termination) = combinator::expect_terminated_text(&mut self.cursor, self.input, self.options.var_start)?;
                     if contents.slice.len() > 0 {
                         self.token(
-                            TokenValueRef::MatchText(str::from_utf8(contents.slice).unwrap()),
+                            TokenValueRef::MatchText(
+                                str::from_utf8(contents.slice)
+                                    .map_err(|e| LexError::from(e).at(contents.lo, contents.hi))?
+                            ),
                             contents.lo,
                             contents.hi
                         );
