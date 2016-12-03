@@ -1,12 +1,11 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use walkdir::{self, WalkDir};
 use spec::{Options, Spec};
 use std::fs::File;
 use std::io::Read;
-use error::Result;
+use Result;
 
 pub struct SpecWalkIter<'a> {
-    base: PathBuf,
     extension: &'a str,
     walk_dir: walkdir::Iter,
     options: Options<'a>,
@@ -36,14 +35,13 @@ impl<'a> SpecWalkIter<'a> {
         let path = entry.path();
         let mut contents = String::new();
         File::open(path)?.read_to_string(&mut contents)?;
-        Spec::parse(self.options, path.strip_prefix(&self.base)?, contents.as_bytes())
+        Spec::parse(self.options, contents.as_bytes())
     }
 }
 
 /// Walks spec directory and returns the iterator over all parsed `Spec` objects.
 pub fn walk_spec_dir<'a>(path: &Path, extension: &'a str, options: Options<'a>) -> SpecWalkIter<'a> {
     SpecWalkIter {
-        base: path.into(),
         extension: extension,
         walk_dir: WalkDir::new(path).into_iter(),
         options: options,

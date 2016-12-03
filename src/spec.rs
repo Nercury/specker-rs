@@ -1,12 +1,9 @@
-use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use std::result;
-use std::path;
-use std::fs::{File, DirBuilder};
-use std::io::{Read, Write};
-use std::borrow::Cow;
+use std::io::Write;
 use std::slice;
-use error::{TemplateWriteError, FileMatchError, Result};
+use error::{TemplateWriteError};
+use Result;
 use ast;
 use tokens;
 
@@ -20,7 +17,6 @@ pub struct Options<'a> {
 
 #[derive(Debug, Clone)]
 pub struct Spec {
-    pub rel_path: PathBuf,
     ast: ast::Spec,
 }
 
@@ -36,10 +32,11 @@ impl<'a> IntoIterator for &'a Spec {
 }
 
 impl Spec {
-    pub fn parse<'a>(options: Options<'a>, rel_path: &'a Path, contents: &'a [u8]) -> Result<Spec> {
+    pub fn parse<'a>(options: Options<'a>, contents: &'a [u8]) -> Result<Spec> {
         Ok(Spec {
-            rel_path: rel_path.into(),
-            ast: ast::Parser::new(tokens::tokenize(options.into(), contents).peekable()).parse_spec()?
+            ast: ast::Parser::new(
+                tokens::tokenize(options.into(), contents).peekable()
+            ).parse_spec()?
         })
     }
 
@@ -77,7 +74,7 @@ impl<'s> Item<'s> {
     }
 
     /// Writes template contents to specified path.
-    pub fn write_file(&'s self, path: &path::Path, params: &HashMap<&str, &str>)
+    pub fn write_contents<O: Write>(&'s self, output: &mut O, params: &HashMap<&str, &str>)
                       -> result::Result<(), TemplateWriteError> {
         for s in self.template {
             match *s {
@@ -89,53 +86,53 @@ impl<'s> Item<'s> {
             }
         }
 
-        match path.parent() {
-            Some(parent) => DirBuilder::new().recursive(true).create(parent)?,
-            None => return Err(TemplateWriteError::PathMustBeFile(format!("{:?}", path))),
-        }
+//        match path.parent() {
+//            Some(parent) => DirBuilder::new().recursive(true).create(parent)?,
+//            None => return Err(TemplateWriteError::PathMustBeFile(format!("{:?}", path))),
+//        }
 
-        let mut f = File::create(path)?;
-        f.write_all(b"Hello, world!")?;
-
-        Ok(())
-    }
-
-    pub fn match_file(&'s self, path: &path::Path, params: &HashMap<&str, &str>)
-                      -> result::Result<(), FileMatchError>
-    {
-        let mut file_contents = String::new();
-        let mut file = File::open(path)?;
-        file.read_to_string(&mut file_contents)?;
-
-        println!("FILE {:?}", file_contents);
+//        let mut f = File::create(path)?;
+        output.write_all(b"")?;
 
         Ok(())
     }
 
-    /// Writes template contents to a file path constructed by joining the specified base path
-    /// and relative path in universal format. "Universal" here means that on windows "some/path"
-    /// is converted to "some\path".
-    pub fn write_file_relative(&'s self, base_path: &path::Path, universal_relative_path: &str, params: &HashMap<&str, &str>)
-                               -> result::Result<(), TemplateWriteError> {
-        self.write_file(
-            &base_path.join(
-                universal_path_to_platform_path(universal_relative_path)
-                    .as_ref()
-            ),
-            params
-        )
-    }
+//    pub fn match_file(&'s self, path: &path::Path, params: &HashMap<&str, &str>)
+//                      -> result::Result<(), FileMatchError>
+//    {
+//        let mut file_contents = String::new();
+//        let mut file = File::open(path)?;
+//        file.read_to_string(&mut file_contents)?;
+//
+//        println!("FILE {:?}", file_contents);
+//
+//        Ok(())
+//    }
 
-    pub fn match_file_relative(&'s self, base_path: &path::Path, universal_relative_path: &str, params: &HashMap<&str, &str>)
-                               -> result::Result<(), FileMatchError> {
-        self.match_file(
-            &base_path.join(
-                universal_path_to_platform_path(universal_relative_path)
-                    .as_ref()
-            ),
-            params
-        )
-    }
+//    /// Writes template contents to a file path constructed by joining the specified base path
+//    /// and relative path in universal format. "Universal" here means that on windows "some/path"
+//    /// is converted to "some\path".
+//    pub fn write_file_relative(&'s self, base_path: &path::Path, universal_relative_path: &str, params: &HashMap<&str, &str>)
+//                               -> result::Result<(), TemplateWriteError> {
+//        self.write_file(
+//            &base_path.join(
+//                universal_path_to_platform_path(universal_relative_path)
+//                    .as_ref()
+//            ),
+//            params
+//        )
+//    }
+
+//    pub fn match_file_relative(&'s self, base_path: &path::Path, universal_relative_path: &str, params: &HashMap<&str, &str>)
+//                               -> result::Result<(), FileMatchError> {
+//        self.match_file(
+//            &base_path.join(
+//                universal_path_to_platform_path(universal_relative_path)
+//                    .as_ref()
+//            ),
+//            params
+//        )
+//    }
 }
 
 pub struct ItemIter<'a> {
@@ -171,18 +168,18 @@ impl<'a, 'p> Iterator for ItemValuesByKeyIter<'a, 'p> {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
-fn universal_path_to_platform_path(universal: &str) -> Cow<str> {
-    Cow::Borrowed(universal)
-}
-
-#[cfg(target_os = "windows")]
-fn universal_path_to_platform_path(universal: &str) -> Cow<str> {
-    Cow::Owned(s.chars()
-        .map(|c| if c == '/' {
-            '\\'
-        } else {
-            c
-        })
-        .collect::<String>())
-}
+//#[cfg(not(target_os = "windows"))]
+//fn universal_path_to_platform_path(universal: &str) -> Cow<str> {
+//    Cow::Borrowed(universal)
+//}
+//
+//#[cfg(target_os = "windows")]
+//fn universal_path_to_platform_path(universal: &str) -> Cow<str> {
+//    Cow::Owned(s.chars()
+//        .map(|c| if c == '/' {
+//            '\\'
+//        } else {
+//            c
+//        })
+//        .collect::<String>())
+//}
