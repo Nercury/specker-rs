@@ -75,7 +75,9 @@ impl<'s> Item<'s> {
 
     /// Writes template contents to specified path.
     pub fn write_contents<O: Write>(&'s self, output: &mut O, params: &HashMap<&str, &str>)
-                      -> result::Result<(), TemplateWriteError> {
+                                    -> result::Result<(), TemplateWriteError> {
+        // validation
+
         for s in self.template {
             match *s {
                 ast::Match::MultipleLines =>
@@ -86,53 +88,54 @@ impl<'s> Item<'s> {
             }
         }
 
-//        match path.parent() {
-//            Some(parent) => DirBuilder::new().recursive(true).create(parent)?,
-//            None => return Err(TemplateWriteError::PathMustBeFile(format!("{:?}", path))),
-//        }
-
-//        let mut f = File::create(path)?;
-        output.write_all(b"")?;
+        for s in self.template {
+            match *s {
+                ast::Match::NewLine => { output.write(b"\n")?; },
+                ast::Match::Text(ref v) => write!(output, "{}", v)?,
+                ast::Match::Var(ref v) => write!(output, "{}", params.get(&v[..]).unwrap())?, // validated above
+                _ => unreachable!(),
+            }
+        }
 
         Ok(())
     }
 
-//    pub fn match_file(&'s self, path: &path::Path, params: &HashMap<&str, &str>)
-//                      -> result::Result<(), FileMatchError>
-//    {
-//        let mut file_contents = String::new();
-//        let mut file = File::open(path)?;
-//        file.read_to_string(&mut file_contents)?;
-//
-//        println!("FILE {:?}", file_contents);
-//
-//        Ok(())
-//    }
+    //    pub fn match_file(&'s self, path: &path::Path, params: &HashMap<&str, &str>)
+    //                      -> result::Result<(), FileMatchError>
+    //    {
+    //        let mut file_contents = String::new();
+    //        let mut file = File::open(path)?;
+    //        file.read_to_string(&mut file_contents)?;
+    //
+    //        println!("FILE {:?}", file_contents);
+    //
+    //        Ok(())
+    //    }
 
-//    /// Writes template contents to a file path constructed by joining the specified base path
-//    /// and relative path in universal format. "Universal" here means that on windows "some/path"
-//    /// is converted to "some\path".
-//    pub fn write_file_relative(&'s self, base_path: &path::Path, universal_relative_path: &str, params: &HashMap<&str, &str>)
-//                               -> result::Result<(), TemplateWriteError> {
-//        self.write_file(
-//            &base_path.join(
-//                universal_path_to_platform_path(universal_relative_path)
-//                    .as_ref()
-//            ),
-//            params
-//        )
-//    }
+    //    /// Writes template contents to a file path constructed by joining the specified base path
+    //    /// and relative path in universal format. "Universal" here means that on windows "some/path"
+    //    /// is converted to "some\path".
+    //    pub fn write_file_relative(&'s self, base_path: &path::Path, universal_relative_path: &str, params: &HashMap<&str, &str>)
+    //                               -> result::Result<(), TemplateWriteError> {
+    //        self.write_file(
+    //            &base_path.join(
+    //                universal_path_to_platform_path(universal_relative_path)
+    //                    .as_ref()
+    //            ),
+    //            params
+    //        )
+    //    }
 
-//    pub fn match_file_relative(&'s self, base_path: &path::Path, universal_relative_path: &str, params: &HashMap<&str, &str>)
-//                               -> result::Result<(), FileMatchError> {
-//        self.match_file(
-//            &base_path.join(
-//                universal_path_to_platform_path(universal_relative_path)
-//                    .as_ref()
-//            ),
-//            params
-//        )
-//    }
+    //    pub fn match_file_relative(&'s self, base_path: &path::Path, universal_relative_path: &str, params: &HashMap<&str, &str>)
+    //                               -> result::Result<(), FileMatchError> {
+    //        self.match_file(
+    //            &base_path.join(
+    //                universal_path_to_platform_path(universal_relative_path)
+    //                    .as_ref()
+    //            ),
+    //            params
+    //        )
+    //    }
 }
 
 pub struct ItemIter<'a> {
