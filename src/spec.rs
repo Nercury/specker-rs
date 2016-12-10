@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::result;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::slice;
-use error::{TemplateWriteError};
+use std::str;
+use error::{TemplateWriteError, TemplateMatchError, At, FilePosition};
 use Result;
 use ast;
 use tokens;
@@ -100,6 +101,54 @@ impl<'s> Item<'s> {
         Ok(())
     }
 
+    pub fn match_contents<I: Read>(&'s self, input: &mut I, params: &HashMap<&str, &str>)
+                                   -> result::Result<(), At<TemplateMatchError>> {
+        let mut pos = FilePosition::new();
+        let mut eol_pos = FilePosition::new();
+        let mut contents = Vec::new();
+        input.read_to_end(&mut contents).map_err(|e| TemplateMatchError::from(e).at(pos, pos))?;
+
+        let mut skip_lines_state = false;
+        update_eol(&pos, &mut eol_pos, &contents);
+
+        for state in self.template {
+            match *state {
+                ast::Match::MultipleLines => skip_lines_state = true,
+                ast::Match::Text(ref text) => {
+                    let pos_byte = pos.byte;
+                    if pos_byte >= contents.len() {
+                        return Err(TemplateMatchError::ExpectedTextFoundEof(text.clone()).at(pos, pos));
+                    }
+
+                    if let Some((bytes, end_bytes)) = matches_content_with_newline(&pos, &contents, text.as_bytes()) {
+                        pos.advance(bytes);
+                        pos.next_line(end_bytes);
+                        skip_lines_state = false;
+                        update_eol(&pos, &mut eol_pos, &contents);
+                    } else {
+                        if skip_lines_state {
+                            pos.advance(eol_pos.byte - pos_byte);
+                            pos.next_line(matches_newline(&eol_pos, &contents).expect("expected newline"));
+                            update_eol(&pos, &mut eol_pos, &contents);
+                        } else {
+                            return Err(TemplateMatchError::ExpectedText {
+                                expected: text.clone(),
+                                found: String::from_utf8_lossy(&contents[pos.byte..eol_pos.byte]).into_owned(),
+                            }.at(pos, eol_pos));
+                        }
+                    }
+                },
+                _ => unimplemented!(),
+            }
+        }
+
+        if !skip_lines_state && pos.byte < contents.len() {
+            return Err(TemplateMatchError::ExpectedEof.at(pos, pos));
+        }
+
+        Ok(())
+    }
+
     //    pub fn match_file(&'s self, path: &path::Path, params: &HashMap<&str, &str>)
     //                      -> result::Result<(), FileMatchError>
     //    {
@@ -136,6 +185,53 @@ impl<'s> Item<'s> {
     //            params
     //        )
     //    }
+}
+
+fn matches_content_with_newline(pos: &FilePosition, content: &[u8], to_match: &[u8]) -> Option<(usize, usize)> {
+    if content[pos.byte..].starts_with(to_match) {
+        let end = &content[pos.byte + to_match.len()..];
+        if end.is_empty() {
+            return Some((to_match.len(), 0));
+        } else if end.starts_with(b"\n") {
+            return Some((to_match.len(), 1));
+        } else if end.starts_with(b"\r\n") {
+            return Some((to_match.len(), 2));
+        }
+    }
+
+    None
+}
+
+fn matches_newline(pos: &FilePosition, content: &[u8]) -> Option<usize> {
+    let end = &content[pos.byte..];
+    if end.is_empty() {
+        return Some(0);
+    } else if end.starts_with(b"\n") {
+        return Some(1);
+    } else if end.starts_with(b"\r\n") {
+        return Some(2);
+    }
+
+    None
+}
+
+fn update_eol(pos: &FilePosition, eol_pos: &mut FilePosition, contents: &[u8]) {
+    let mut eol = pos.byte;
+    loop {
+        if eol >= contents.len() {
+            break;
+        }
+
+        let slice = &contents[eol..];
+
+        if slice.starts_with(b"\n") || slice.starts_with(b"\r\n") {
+            break;
+        }
+
+        eol += 1;
+    }
+
+        * eol_pos = pos.advanced(eol - pos.byte);
 }
 
 pub struct ItemIter<'a> {

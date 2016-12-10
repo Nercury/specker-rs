@@ -5,11 +5,11 @@ extern crate specker;
 #[cfg(test)]
 mod write_template_item {
     use specker::{self, Match};
-    use support::{match_item, write};
+    use support::{new_item, write};
 
     #[test]
     fn empty_item_should_produce_empty_file() {
-        let file = write(match_item(&[]), &[]).unwrap();
+        let file = write(new_item(&[]), &[]).unwrap();
         assert_contents!(
             &file,
             ""
@@ -18,19 +18,19 @@ mod write_template_item {
 
     #[test]
     fn template_item_that_contains_multiple_lines_should_produce_error() {
-        let err = write(match_item(&[Match::MultipleLines]), &[]).err().expect("expected error");
+        let err = write(new_item(&[Match::MultipleLines]), &[]).err().expect("expected error");
         assert_eq!(err, specker::error::TemplateWriteError::CanNotWriteMatchAnySymbols);
     }
 
     #[test]
     fn template_item_that_is_missing_param_should_produce_error() {
-        let err = write(match_item(&[Match::Var("hi".into())]), &[]).err().expect("expected error");
+        let err = write(new_item(&[Match::Var("hi".into())]), &[]).err().expect("expected error");
         assert_eq!(err, specker::error::TemplateWriteError::MissingParam("hi".into()));
     }
 
     #[test]
     fn new_line() {
-        let file = write(match_item(&[Match::NewLine]), &[]).unwrap();
+        let file = write(new_item(&[Match::NewLine]), &[]).unwrap();
         assert_contents!(
             &file,
             "\n"
@@ -39,7 +39,7 @@ mod write_template_item {
 
     #[test]
     fn new_line_x2() {
-        let file = write(match_item(&[Match::NewLine, Match::NewLine]), &[]).unwrap();
+        let file = write(new_item(&[Match::NewLine, Match::NewLine]), &[]).unwrap();
         assert_contents!(
             &file,
             "\n\n"
@@ -48,7 +48,7 @@ mod write_template_item {
 
     #[test]
     fn text() {
-        let file = write(match_item(&[Match::Text("hello".into())]), &[]).unwrap();
+        let file = write(new_item(&[Match::Text("hello".into())]), &[]).unwrap();
         assert_contents!(
             &file,
             "hello"
@@ -57,7 +57,7 @@ mod write_template_item {
 
     #[test]
     fn text_x2() {
-        let file = write(match_item(&[Match::Text("hello".into()), Match::Text("world".into())]), &[]).unwrap();
+        let file = write(new_item(&[Match::Text("hello".into()), Match::Text("world".into())]), &[]).unwrap();
         assert_contents!(
             &file,
             "helloworld"
@@ -66,7 +66,7 @@ mod write_template_item {
 
     #[test]
     fn param() {
-        let file = write(match_item(&[Match::Var("a".into())]), &[("a", "hello")]).unwrap();
+        let file = write(new_item(&[Match::Var("a".into())]), &[("a", "hello")]).unwrap();
         assert_contents!(
             &file,
             "hello"
@@ -75,7 +75,7 @@ mod write_template_item {
 
     #[test]
     fn param_x2() {
-        let file = write(match_item(&[Match::Var("a".into()), Match::Var("a".into())]), &[("a", "hello")]).unwrap();
+        let file = write(new_item(&[Match::Var("a".into()), Match::Var("a".into())]), &[("a", "hello")]).unwrap();
         assert_contents!(
             &file,
             "hellohello"
@@ -84,7 +84,7 @@ mod write_template_item {
 
     #[test]
     fn two_params() {
-        let file = write(match_item(&[
+        let file = write(new_item(&[
             Match::Var("a".into()),
             Match::Var("b".into()),
         ]), &[
@@ -99,7 +99,7 @@ mod write_template_item {
 
     #[test]
     fn mixed() {
-        let file = write(match_item(&[
+        let file = write(new_item(&[
             Match::Var("a".into()),
             Match::NewLine,
             Match::Var("b".into()),

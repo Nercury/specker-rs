@@ -84,7 +84,17 @@ impl fmt::Display for ParseError {
             ParseError::Lex(ref e) => e.fmt(f),
             ParseError::ExpectedKeyFoundValue => "Expected key, found value".fmt(f),
             ParseError::UnexpectedEndOfTokens => "Unexpected end of file".fmt(f),
-            ParseError::ExpectedDifferentToken { ref expected, ref found } => write!(f, "Expected {}, buf found {}", expected.iter().map(|t| format!("{}", t)).collect::<Vec<_>>().join(" or "), found),
+            ParseError::ExpectedDifferentToken { ref expected, ref found } => {
+                write!(
+                    f,
+                    "Expected {}, buf found {}",
+                    expected.iter()
+                        .map(|t| format!("{}", t))
+                        .collect::<Vec<_>>()
+                        .join(" or "),
+                    found
+                )
+            },
         }
     }
 }
@@ -147,13 +157,41 @@ impl From<::std::io::Error> for TemplateWriteError {
 
 #[derive(Debug)]
 pub enum TemplateMatchError {
+    ExpectedEof,
+    ExpectedText {
+        expected: String,
+        found: String
+    },
+    ExpectedTextFoundEof(String),
     MissingParam(String),
     Io(::std::io::Error),
+}
+
+impl TemplateMatchError {
+    pub fn at(self, lo: FilePosition, hi: FilePosition) -> At<TemplateMatchError> {
+        At {
+            lo: lo,
+            hi: hi,
+            desc: self,
+        }
+    }
 }
 
 impl PartialEq for TemplateMatchError {
     fn eq(&self, other: &TemplateMatchError) -> bool {
         match (self, other) {
+            (&TemplateMatchError::ExpectedEof, &TemplateMatchError::ExpectedEof) => true,
+            (
+                &TemplateMatchError::ExpectedText {
+                    expected: ref expected_a,
+                    found: ref found_a
+                },
+                &TemplateMatchError::ExpectedText {
+                    expected: ref expected_b,
+                    found: ref found_b
+                }
+            ) => expected_a.eq(expected_b) && found_a.eq(found_b),
+            (&TemplateMatchError::ExpectedTextFoundEof(ref a), &TemplateMatchError::ExpectedTextFoundEof(ref b)) => a.eq(b),
             (&TemplateMatchError::MissingParam(ref a), &TemplateMatchError::MissingParam(ref b)) => a.eq(b),
             (&TemplateMatchError::Io(ref a), &TemplateMatchError::Io(ref b)) => a.description() == b.description(),
             (_, _) => false,
@@ -166,6 +204,9 @@ impl Eq for TemplateMatchError {}
 impl ::std::error::Error for TemplateMatchError {
     fn description(&self) -> &str {
         match *self {
+            TemplateMatchError::ExpectedEof => "expected end of file",
+            TemplateMatchError::ExpectedText { .. } => "expected text not found",
+            TemplateMatchError::ExpectedTextFoundEof(_) => "expected text, found end of file",
             TemplateMatchError::MissingParam(_) => "missing template param",
             TemplateMatchError::Io(ref e) => e.description(),
         }
@@ -175,6 +216,9 @@ impl ::std::error::Error for TemplateMatchError {
 impl fmt::Display for TemplateMatchError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
+            TemplateMatchError::ExpectedEof => "Expected end of file".fmt(f),
+            TemplateMatchError::ExpectedText { ref expected, ref found } => write!(f, "Expected {:?}, found {:?}", expected, found),
+            TemplateMatchError::ExpectedTextFoundEof(ref p) => write!(f, "Expected {:?}, found end of file", p),
             TemplateMatchError::MissingParam(ref p) => write!(f, "Missing template param {:?}", p),
             TemplateMatchError::Io(ref e) => e.fmt(f),
         }
@@ -191,7 +235,7 @@ pub type LexResult<T> = result::Result<T, At<LexError>>;
 pub type ParseResult<T> = result::Result<T, At<ParseError>>;
 
 #[derive(Debug, Clone)]
-pub struct At<T> where T: fmt::Debug + Clone {
+pub struct At<T> where T: fmt::Debug {
     /// The low position at which this error is pointing at.
     pub lo: FilePosition,
     /// One byte beyond the last character at which this error is pointing at.
@@ -200,19 +244,45 @@ pub struct At<T> where T: fmt::Debug + Clone {
     pub desc: T,
 }
 
-impl<T: fmt::Debug + Clone> ::std::error::Error for At<T> where T: ::std::error::Error {
+impl<T: fmt::Debug> At<T> {
+    pub fn assert_matches(&self, other_err: &T, lo: (usize, usize), hi: (usize, usize)) -> result::Result<(), String> where T: PartialEq {
+        if !self.desc.eq(other_err) {
+            return Err(format!("{:?} does not match {:?}", self.desc, other_err));
+        }
+
+        if self.lo.line != lo.0 {
+            return Err(format!("expected error start line at {}, found {}", lo.0, self.lo.line));
+        }
+
+        if self.hi.line != hi.0 {
+            return Err(format!("expected error end line at {}, found {}", hi.0, self.hi.line));
+        }
+
+        if self.lo.col != lo.1 {
+            return Err(format!("expected error start col at {}, found {}", lo.1, self.lo.col));
+        }
+
+        if self.hi.col != hi.1 {
+            return Err(format!("expected error end col at {}, found {}", hi.1, self.hi.col));
+        }
+
+        Ok(())
+    }
+}
+
+impl<T: fmt::Debug> ::std::error::Error for At<T> where T: ::std::error::Error {
     fn description(&self) -> &str {
         self.desc.description()
     }
 }
 
-impl<T: fmt::Debug + Clone> PartialEq for At<T> where T: Eq + PartialEq {
+impl<T: fmt::Debug> PartialEq for At<T> where T: Eq + PartialEq {
     fn eq(&self, other: &At<T>) -> bool {
         self.desc == other.desc
     }
 }
 
-impl<T: fmt::Debug + Clone> fmt::Display for At<T> where T: fmt::Display {
+impl<T: fmt::Debug> fmt::Display for At<T> where T: fmt::Display {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{} at {} - {}", self.desc, self.lo, self.hi)
     }
@@ -249,9 +319,11 @@ impl FilePosition {
     }
 
     pub fn next_line(&mut self, bytes: usize) {
-        self.byte += bytes;
-        self.col = 0;
-        self.line += 1;
+        if bytes > 0 {
+            self.byte += bytes;
+            self.col = 0;
+            self.line += 1;
+        }
     }
 }
 
