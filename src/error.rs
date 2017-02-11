@@ -162,6 +162,7 @@ pub enum TemplateMatchError {
         expected: String,
         found: String
     },
+    ExpectedLineFoundEof,
     ExpectedTextFoundEof(String),
     MissingParam(String),
     Io(::std::io::Error),
@@ -207,6 +208,7 @@ impl ::std::error::Error for TemplateMatchError {
             TemplateMatchError::ExpectedEof => "expected end of file",
             TemplateMatchError::ExpectedText { .. } => "expected text not found",
             TemplateMatchError::ExpectedTextFoundEof(_) => "expected text, found end of file",
+            TemplateMatchError::ExpectedLineFoundEof => "expected line, found end of file",
             TemplateMatchError::MissingParam(_) => "missing template param",
             TemplateMatchError::Io(ref e) => e.description(),
         }
@@ -219,6 +221,7 @@ impl fmt::Display for TemplateMatchError {
             TemplateMatchError::ExpectedEof => "Expected end of file".fmt(f),
             TemplateMatchError::ExpectedText { ref expected, ref found } => write!(f, "Expected {:?}, found {:?}", expected, found),
             TemplateMatchError::ExpectedTextFoundEof(ref p) => write!(f, "Expected {:?}, found end of file", p),
+            TemplateMatchError::ExpectedLineFoundEof => "Expected line, found end of file".fmt(f),
             TemplateMatchError::MissingParam(ref p) => write!(f, "Missing template param {:?}", p),
             TemplateMatchError::Io(ref e) => e.fmt(f),
         }

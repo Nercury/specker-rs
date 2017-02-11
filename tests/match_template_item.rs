@@ -80,4 +80,19 @@ mod match_template_item {
             "hip\nhi"
         ).expect("expected match");
     }
+
+    #[test]
+    fn text_and_multiple_lines_not_match() {
+        let err = match_item(
+            new_item(&[
+                Match::Text("hi".into()),
+                Match::MultipleLines,
+            ]),
+            &[],
+            "hi"
+        ).err().expect("expected error");
+        err.assert_matches(
+            &TemplateMatchError::ExpectedLineFoundEof, (0, 2), (0, 2)
+        ).unwrap();
+    }
 }

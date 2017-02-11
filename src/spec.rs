@@ -109,11 +109,15 @@ impl<'s> Item<'s> {
         input.read_to_end(&mut contents).map_err(|e| TemplateMatchError::from(e).at(pos, pos))?;
 
         let mut skip_lines_state = false;
+        let mut skipped_lines = 0;
         update_eol(&pos, &mut eol_pos, &contents);
 
         for state in self.template {
             match *state {
-                ast::Match::MultipleLines => skip_lines_state = true,
+                ast::Match::MultipleLines => {
+                    skip_lines_state = true;
+                    skipped_lines = 0;
+                },
                 ast::Match::Text(ref text) => {
                     let pos_byte = pos.byte;
                     if pos_byte >= contents.len() {
@@ -130,6 +134,7 @@ impl<'s> Item<'s> {
                             pos.advance(eol_pos.byte - pos_byte);
                             pos.next_line(matches_newline(&eol_pos, &contents).expect("expected newline"));
                             update_eol(&pos, &mut eol_pos, &contents);
+                            skipped_lines += 1;
                         } else {
                             return Err(TemplateMatchError::ExpectedText {
                                 expected: text.clone(),
@@ -142,8 +147,12 @@ impl<'s> Item<'s> {
             }
         }
 
-        if !skip_lines_state && pos.byte < contents.len() {
-            return Err(TemplateMatchError::ExpectedEof.at(pos, pos));
+        if skip_lines_state {
+
+        } else {
+            if pos.byte < contents.len() {
+                return Err(TemplateMatchError::ExpectedEof.at(pos, pos));
+            }
         }
 
         Ok(())
