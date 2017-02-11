@@ -158,6 +158,7 @@ impl From<::std::io::Error> for TemplateWriteError {
 #[derive(Debug)]
 pub enum TemplateMatchError {
     ExpectedEof,
+    ExpectedEolOrEof,
     ExpectedText {
         expected: String,
         found: String
@@ -182,6 +183,7 @@ impl PartialEq for TemplateMatchError {
     fn eq(&self, other: &TemplateMatchError) -> bool {
         match (self, other) {
             (&TemplateMatchError::ExpectedEof, &TemplateMatchError::ExpectedEof) => true,
+            (&TemplateMatchError::ExpectedEolOrEof, &TemplateMatchError::ExpectedEolOrEof) => true,
             (
                 &TemplateMatchError::ExpectedText {
                     expected: ref expected_a,
@@ -206,6 +208,7 @@ impl ::std::error::Error for TemplateMatchError {
     fn description(&self) -> &str {
         match *self {
             TemplateMatchError::ExpectedEof => "expected end of file",
+            TemplateMatchError::ExpectedEolOrEof => "expected end of line or end of file",
             TemplateMatchError::ExpectedText { .. } => "expected text not found",
             TemplateMatchError::ExpectedTextFoundEof(_) => "expected text, found end of file",
             TemplateMatchError::ExpectedLineFoundEof => "expected line, found end of file",
@@ -219,6 +222,7 @@ impl fmt::Display for TemplateMatchError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             TemplateMatchError::ExpectedEof => "Expected end of file".fmt(f),
+            TemplateMatchError::ExpectedEolOrEof => "Expected end of line or end of file".fmt(f),
             TemplateMatchError::ExpectedText { ref expected, ref found } => write!(f, "Expected {:?}, found {:?}", expected, found),
             TemplateMatchError::ExpectedTextFoundEof(ref p) => write!(f, "Expected {:?}, found end of file", p),
             TemplateMatchError::ExpectedLineFoundEof => "Expected line, found end of file".fmt(f),

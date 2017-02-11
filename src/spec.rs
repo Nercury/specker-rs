@@ -101,6 +101,40 @@ impl<'s> Item<'s> {
         Ok(())
     }
 
+    fn get_multiline_match_groups(&'s self) -> Vec<MultilineMatchState<'s>> {
+        let mut results = Vec::new();
+        let mut prev_group: Option<Vec<&ast::Match>> = None;
+
+        for state in self.template {
+            match *state {
+                ref m @ ast::Match::MultipleLines | ref m @ ast::Match::NewLine => {
+                    if let Some(group) = prev_group {
+                        results.push(MultilineMatchState::Line(LineGroup::new(group)));
+                    }
+                    if let ast::Match::MultipleLines = *m {
+                        prev_group = None;
+                        results.push(MultilineMatchState::MultipleLines);
+                    } else {
+                        prev_group = Some(Vec::new());
+                    }
+                },
+                ref other => {
+                    if let Some(ref mut matches) = prev_group {
+                        matches.push(other);
+                    } else {
+                        prev_group = Some(vec![other]);
+                    }
+                }
+            }
+        }
+
+        if let Some(group) = prev_group {
+            results.push(MultilineMatchState::Line(LineGroup::new(group)));
+        }
+
+        results
+    }
+
     pub fn match_contents<I: Read>(&'s self, input: &mut I, params: &HashMap<&str, &str>)
                                    -> result::Result<(), At<TemplateMatchError>> {
         let mut pos = FilePosition::new();
@@ -109,47 +143,63 @@ impl<'s> Item<'s> {
         input.read_to_end(&mut contents).map_err(|e| TemplateMatchError::from(e).at(pos, pos))?;
 
         let mut skip_lines_state = false;
-        let mut skipped_lines = 0;
         update_eol(&pos, &mut eol_pos, &contents);
 
-        for state in self.template {
-            match *state {
-                ast::Match::MultipleLines => {
-                    skip_lines_state = true;
-                    skipped_lines = 0;
-                },
-                ast::Match::Text(ref text) => {
-                    let pos_byte = pos.byte;
-                    if pos_byte >= contents.len() {
-                        return Err(TemplateMatchError::ExpectedTextFoundEof(text.clone()).at(pos, pos));
-                    }
+        // sort tokens into groups that ends with new line, multiple lines, or eof
+        let line_groups = self.get_multiline_match_groups();
 
-                    if let Some((bytes, end_bytes)) = matches_content_with_newline(&pos, &contents, text.as_bytes()) {
-                        pos.advance(bytes);
-                        pos.next_line(end_bytes);
-                        skip_lines_state = false;
-                        update_eol(&pos, &mut eol_pos, &contents);
-                    } else {
-                        if skip_lines_state {
-                            pos.advance(eol_pos.byte - pos_byte);
-                            pos.next_line(matches_newline(&eol_pos, &contents).expect("expected newline"));
-                            update_eol(&pos, &mut eol_pos, &contents);
-                            skipped_lines += 1;
-                        } else {
-                            return Err(TemplateMatchError::ExpectedText {
-                                expected: text.clone(),
-                                found: String::from_utf8_lossy(&contents[pos.byte..eol_pos.byte]).into_owned(),
-                            }.at(pos, eol_pos));
+        for state in line_groups {
+            match state {
+                MultilineMatchState::MultipleLines => {
+                    skip_lines_state = true;
+                },
+                MultilineMatchState::Line(line) => {
+                    'text: loop {
+                        let pos_byte = pos.byte;
+                        match line.matches(pos, &contents) {
+                            Ok((bytes, end_bytes)) => {
+                                pos.advance(bytes);
+                                pos.next_line(end_bytes);
+                                skip_lines_state = false;
+                                update_eol(&pos, &mut eol_pos, &contents);
+
+                                break 'text;
+                            }
+                            Err(err_match) => if skip_lines_state {
+
+                                if pos_byte >= contents.len() {
+                                    match err_match {
+                                        LineGroupMatchErr::Text { pos: err_pos, text: text } =>
+                                            return Err(
+                                                TemplateMatchError::ExpectedTextFoundEof(text.to_string())
+                                                    .at(err_pos, eol_pos)
+                                            ),
+                                        _ => (),
+                                    };
+                                }
+
+                                pos.advance(eol_pos.byte - pos_byte);
+                                pos.next_line(matches_newline(&eol_pos, &contents).expect("expected newline"));
+                                update_eol(&pos, &mut eol_pos, &contents);
+
+                                continue 'text;
+                            } else {
+                                match err_match {
+                                    LineGroupMatchErr::Text { pos: err_pos, text: text } => return Err(TemplateMatchError::ExpectedText {
+                                        expected: text.to_string(),
+                                        found: String::from_utf8_lossy(&contents[err_pos.byte..eol_pos.byte]).into_owned(),
+                                    }.at(err_pos, eol_pos)),
+                                    LineGroupMatchErr::NewLineOrEof { pos: err_pos } =>
+                                        return Err(TemplateMatchError::ExpectedEolOrEof.at(err_pos, err_pos)),
+                                }
+                            }
                         }
                     }
                 },
-                _ => unimplemented!(),
             }
         }
 
-        if skip_lines_state {
-
-        } else {
+        if !skip_lines_state {
             if pos.byte < contents.len() {
                 return Err(TemplateMatchError::ExpectedEof.at(pos, pos));
             }
@@ -196,6 +246,60 @@ impl<'s> Item<'s> {
     //    }
 }
 
+#[derive(Debug)]
+enum MultilineMatchState<'a> {
+    MultipleLines,
+    Line(LineGroup<'a>),
+}
+
+#[derive(Debug)]
+enum LineGroupMatchErr<'a> {
+    Text {
+        pos: FilePosition,
+        text: &'a str,
+    },
+    NewLineOrEof {
+        pos: FilePosition,
+    }
+}
+
+#[derive(Debug)]
+struct LineGroup<'a> {
+    tokens: Vec<&'a ast::Match>,
+}
+
+impl<'a> LineGroup<'a> {
+    pub fn new<'r>(tokens: Vec<&'r ast::Match>) -> LineGroup<'r> {
+        LineGroup {
+            tokens: tokens
+        }
+    }
+
+    pub fn matches<'o>(&'a self, mut pos: FilePosition, content: &'o [u8])
+        -> result::Result<(usize, usize), LineGroupMatchErr>
+    {
+        let start_pos = pos;
+
+        for token in &self.tokens {
+            match **token {
+                ast::Match::Text(ref text) => if let Some(bytes) = matches_content(&pos, content, text.as_bytes()) {
+                    pos.advance(bytes);
+                } else {
+                    return Err(LineGroupMatchErr::Text { pos: pos, text: text });
+                },
+                ast::Match::Var(_) => unreachable!("not implemented var match"),
+                ast::Match::MultipleLines => unreachable!(),
+                ast::Match::NewLine => unreachable!(),
+            }
+        }
+
+        match matches_newline(&pos, content) {
+            Some(newline_bytes) => Ok((pos.byte - start_pos.byte, newline_bytes)),
+            None => Err(LineGroupMatchErr::NewLineOrEof { pos: pos }),
+        }
+    }
+}
+
 fn matches_content_with_newline(pos: &FilePosition, content: &[u8], to_match: &[u8]) -> Option<(usize, usize)> {
     if content[pos.byte..].starts_with(to_match) {
         let end = &content[pos.byte + to_match.len()..];
@@ -206,6 +310,15 @@ fn matches_content_with_newline(pos: &FilePosition, content: &[u8], to_match: &[
         } else if end.starts_with(b"\r\n") {
             return Some((to_match.len(), 2));
         }
+    }
+
+    None
+}
+
+fn matches_content(pos: &FilePosition, content: &[u8], to_match: &[u8]) -> Option<usize> {
+    if content[pos.byte..].starts_with(to_match) {
+        let end = &content[pos.byte + to_match.len()..];
+        return Some(to_match.len());
     }
 
     None
@@ -240,7 +353,7 @@ fn update_eol(pos: &FilePosition, eol_pos: &mut FilePosition, contents: &[u8]) {
         eol += 1;
     }
 
-        * eol_pos = pos.advanced(eol - pos.byte);
+    *eol_pos = pos.advanced(eol - pos.byte);
 }
 
 pub struct ItemIter<'a> {
