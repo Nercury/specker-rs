@@ -11,3 +11,6 @@ categories = ["development-tools::testing"]
 
 [dependencies]
 walkdir = "1.0"
+
+[badges]
+travis-ci = { repository = "Nercury/specker-rs" }
