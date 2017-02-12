@@ -1,10 +1,10 @@
 [package]
 name = "specker"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Nerijus Arlauskas <nercury@gmail.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Nercury/specker-rs"
-documentation = "https://docs.rs/specker/0.1.0/specker/"
+documentation = "https://docs.rs/specker/"
 description = "Testing utility that simplifies file matching against bunch of templates."
 readme = "README.md"
 keywords = ["spec", "testing", "utility", "dev"]
