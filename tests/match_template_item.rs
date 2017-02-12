@@ -5,7 +5,7 @@ mod support;
 #[cfg(test)]
 mod match_template_item {
     use specker::Match;
-    use specker::error::TemplateMatchError;
+    use specker::TemplateMatchError;
     use support::{new_item, match_item};
 
     #[test]

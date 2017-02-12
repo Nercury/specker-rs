@@ -114,7 +114,6 @@ pub struct Iter<'a> {
 
 impl<'a> Iter<'a> {
     fn token(&mut self, token: TokenValueRef<'a>, lo: FilePosition, hi: FilePosition) {
-        debug!("token: {:?}", token);
         self.tokens.push_back(TokenRef { value: token, lo: lo, hi: hi });
     }
 
@@ -279,8 +278,6 @@ pub fn tokenize<'a>(options: Options<'a>, input: &'a [u8]) -> Iter<'a> {
 
 #[cfg(test)]
 mod tests {
-    extern crate env_logger;
-
     use super::*;
 
     fn default_options() -> Options<'static> {
@@ -301,8 +298,6 @@ mod tests {
 
     #[test]
     fn test_single_param_line() {
-        let _ = env_logger::init();
-
         let mut tokens = tokenize(
             default_options(),
             b"## lib: hello"
@@ -315,8 +310,6 @@ mod tests {
 
     #[test]
     fn test_single_content_line() {
-        let _ = env_logger::init();
-
         let mut tokens = tokenize(
             default_options(),
             b"Blah blah blah"
@@ -328,8 +321,6 @@ mod tests {
 
     #[test]
     fn test_single_line_with_var() {
-        let _ = env_logger::init();
-
         let mut tokens;
 
         tokens = tokenize(default_options(), b"${ haha, yay }");
@@ -339,8 +330,6 @@ mod tests {
 
     #[test]
     fn test_single_line_with_content_and_var() {
-        let _ = env_logger::init();
-
         let mut tokens;
 
         tokens = tokenize(default_options(), b"Foo ${ haha, yay }");
@@ -351,8 +340,6 @@ mod tests {
 
     #[test]
     fn test_single_line_with_var_and_content() {
-        let _ = env_logger::init();
-
         let mut tokens;
 
         tokens = tokenize(default_options(), b"${ haha, yay } Bar");
@@ -363,8 +350,6 @@ mod tests {
 
     #[test]
     fn test_single_line_mixed() {
-        let _ = env_logger::init();
-
         let mut tokens;
 
         tokens = tokenize(default_options(), b"Foo ${ haha, yay } Bar");
@@ -388,8 +373,6 @@ mod tests {
 
     #[test]
     fn test_multi_line_params_and_content() {
-        let _ = env_logger::init();
-
         let mut tokens;
 
         tokens = tokenize(default_options(), b"## lib: hello
@@ -402,8 +385,6 @@ ${ X }");
 
     #[test]
     fn test_multi_line_params_and_content_with_skipped_lines() {
-        let _ = env_logger::init();
-
         let mut tokens;
 
         tokens = tokenize(default_options(), b"## lib: hello
@@ -430,8 +411,6 @@ ${ X }
 
     #[test]
     fn test_multi_line_content_with_params() {
-        let _ = env_logger::init();
-
         let mut tokens;
 
         tokens = tokenize(default_options(), b"..
@@ -452,8 +431,6 @@ ${ X }
 
     #[test]
     fn test_multi_line_varying_content_and_params() {
-        let _ = env_logger::init();
-
         let mut tokens;
 
         tokens = tokenize(default_options(), b"## a: b
@@ -480,8 +457,6 @@ k ${ Y } z
 
     #[test]
     fn test_newline_match_tokens() {
-        let _ = env_logger::init();
-
         let mut tokens;
 
         tokens = tokenize(default_options(), b"..

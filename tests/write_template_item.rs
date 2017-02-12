@@ -19,13 +19,13 @@ mod write_template_item {
     #[test]
     fn template_item_that_contains_multiple_lines_should_produce_error() {
         let err = write(new_item(&[Match::MultipleLines]), &[]).err().expect("expected error");
-        assert_eq!(err, specker::error::TemplateWriteError::CanNotWriteMatchAnySymbols);
+        assert_eq!(err, specker::TemplateWriteError::CanNotWriteMatchAnySymbols);
     }
 
     #[test]
     fn template_item_that_is_missing_param_should_produce_error() {
         let err = write(new_item(&[Match::Var("hi".into())]), &[]).err().expect("expected error");
-        assert_eq!(err, specker::error::TemplateWriteError::MissingParam("hi".into()));
+        assert_eq!(err, specker::TemplateWriteError::MissingParam("hi".into()));
     }
 
     #[test]

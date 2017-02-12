@@ -2,7 +2,7 @@
 
 extern crate specker;
 
-use specker::error::{TemplateMatchError, At};
+use specker::{TemplateMatchError, TemplateWriteError, At};
 
 macro_rules! assert_contents {
     ($a:expr, $b:expr) => { assert_eq!(unsafe {::std::str::from_utf8_unchecked($a)}, $b) };
@@ -20,7 +20,7 @@ pub fn match_item<'a>(item: specker::Item<'a>, params: &[(&str, &str)], contents
     Ok(item.match_contents(&mut cursor, &params.iter().cloned().collect())?)
 }
 
-pub fn write<'a>(item: specker::Item<'a>, params: &[(&str, &str)]) -> Result<Vec<u8>, specker::error::TemplateWriteError> {
+pub fn write<'a>(item: specker::Item<'a>, params: &[(&str, &str)]) -> Result<Vec<u8>, TemplateWriteError> {
     let mut file = Vec::new();
 
     item.write_contents(&mut file, &params.iter().cloned().collect())?;
