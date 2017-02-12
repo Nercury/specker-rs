@@ -1,5 +1,7 @@
 ## Specker
 
+[![Build Status](https://travis-ci.org/Nercury/specker-rs.svg?branch=master)](https://travis-ci.org/Nercury/specker-rs)
+
 Checks if any number of files match some specification.
 Designed for testing file generation.
 
