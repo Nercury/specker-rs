@@ -107,16 +107,20 @@ impl<'s> Item<'s> {
 
         for state in self.template {
             match *state {
-                ref m @ ast::Match::MultipleLines | ref m @ ast::Match::NewLine => {
+                ast::Match::MultipleLines => {
                     if let Some(group) = prev_group {
                         results.push(MultilineMatchState::Line(LineGroup::new(group)));
                     }
-                    if let ast::Match::MultipleLines = *m {
-                        prev_group = None;
-                        results.push(MultilineMatchState::MultipleLines);
+                    prev_group = None;
+                    results.push(MultilineMatchState::MultipleLines);
+                }
+                ast::Match::NewLine => {
+                    if let Some(group) = prev_group {
+                        results.push(MultilineMatchState::Line(LineGroup::new(group)));
                     } else {
-                        prev_group = Some(Vec::new());
+                        results.push(MultilineMatchState::Line(LineGroup::new(vec![])));
                     }
+                    prev_group = Some(Vec::new());
                 },
                 ref other => {
                     if let Some(ref mut matches) = prev_group {
@@ -143,6 +147,7 @@ impl<'s> Item<'s> {
         input.read_to_end(&mut contents).map_err(|e| TemplateMatchError::from(e).at(pos, pos))?;
 
         let mut skip_lines_state = false;
+        let mut had_new_line = true;
         update_eol(&pos, &mut eol_pos, &contents);
 
         // sort tokens into groups that ends with new line, multiple lines, or eof
@@ -151,21 +156,36 @@ impl<'s> Item<'s> {
         for state in line_groups {
             match state {
                 MultilineMatchState::MultipleLines => {
+                    println!("MultilineMatchState::MultipleLines");
                     skip_lines_state = true;
                 },
                 MultilineMatchState::Line(line) => {
+                    println!("MultilineMatchState::Line({:?})", line);
+
                     'text: loop {
+                        println!("loop text");
+
                         let pos_byte = pos.byte;
                         match line.matches(pos, &contents) {
                             Ok((bytes, end_bytes)) => {
+                                println!("matches {:?}, {:?} at {:?}", bytes, end_bytes, unsafe { str::from_utf8_unchecked(&contents[pos.byte..eol_pos.byte]) });
+                                println!("has new line {:?}", had_new_line);
+
+                                if bytes == 0 && !had_new_line {
+                                    return Err(TemplateMatchError::ExpectedEol.at(pos, pos));
+                                }
+
                                 pos.advance(bytes);
                                 pos.next_line(end_bytes);
+                                had_new_line = end_bytes > 0;
                                 skip_lines_state = false;
                                 update_eol(&pos, &mut eol_pos, &contents);
 
                                 break 'text;
                             }
                             Err(err_match) => if skip_lines_state {
+
+                                println!("no match, skip_lines_state");
 
                                 if pos_byte >= contents.len() {
                                     match err_match {
@@ -184,13 +204,15 @@ impl<'s> Item<'s> {
 
                                 continue 'text;
                             } else {
+                                println!("no match, return");
+
                                 match err_match {
                                     LineGroupMatchErr::Text { pos: err_pos, text: text } => return Err(TemplateMatchError::ExpectedText {
                                         expected: text.to_string(),
                                         found: String::from_utf8_lossy(&contents[err_pos.byte..eol_pos.byte]).into_owned(),
                                     }.at(err_pos, eol_pos)),
                                     LineGroupMatchErr::NewLineOrEof { pos: err_pos } =>
-                                        return Err(TemplateMatchError::ExpectedEolOrEof.at(err_pos, err_pos)),
+                                        return Err(TemplateMatchError::ExpectedEol.at(err_pos, err_pos)),
                                 }
                             }
                         }
@@ -200,7 +222,7 @@ impl<'s> Item<'s> {
         }
 
         if !skip_lines_state {
-            if pos.byte < contents.len() {
+            if pos.byte < contents.len() || (had_new_line && contents.len() > 0) {
                 return Err(TemplateMatchError::ExpectedEof.at(pos, pos));
             }
         }

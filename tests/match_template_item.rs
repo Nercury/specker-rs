@@ -71,7 +71,7 @@ mod match_template_item {
             "hip"
         ).err().expect("expected error");
         err.assert_matches(
-            &TemplateMatchError::ExpectedEolOrEof,
+            &TemplateMatchError::ExpectedEol,
             (0, 2), (0, 2)
         ).unwrap();
     }
@@ -215,6 +215,297 @@ mod match_template_item {
                 found: "hell".into(),
             },
             (0, 0), (0, 4)
+        ).unwrap();
+    }
+
+    #[test]
+    fn leading_newline_match() {
+        match_item(
+            new_item(&[
+                Match::NewLine,
+                Match::Text("hello".into()),
+            ]),
+            &[],
+            "\nhello"
+        ).expect("expected match");
+    }
+
+    #[test]
+    fn leading_newline_not_match_1() {
+        let err = match_item(
+            new_item(&[
+                Match::NewLine,
+                Match::Text("hello".into()),
+            ]),
+            &[],
+            "\n\nhello"
+        ).err().expect("expected error");
+        err.assert_matches(
+            &TemplateMatchError::ExpectedText {
+                expected: "hello".into(),
+                found: "".into(),
+            },
+            (1, 0), (1, 0)
+        ).unwrap();
+    }
+
+    #[test]
+    fn leading_newline_not_match_2() {
+        let err = match_item(
+            new_item(&[
+                Match::NewLine,
+                Match::Text("hello".into()),
+            ]),
+            &[],
+            "hello"
+        ).err().expect("expected error");
+        err.assert_matches(
+            &TemplateMatchError::ExpectedEol,
+            (0, 0), (0, 0)
+        ).unwrap();
+    }
+
+    #[test]
+    fn leading_newlines_match() {
+        match_item(
+            new_item(&[
+                Match::NewLine,
+                Match::NewLine,
+                Match::Text("hello".into()),
+            ]),
+            &[],
+            "\n\nhello"
+        ).expect("expected match");
+    }
+
+    #[test]
+    fn leading_newlines_not_match_1() {
+        let err = match_item(
+            new_item(&[
+                Match::NewLine,
+                Match::NewLine,
+                Match::Text("hello".into()),
+            ]),
+            &[],
+            "\nhello"
+        ).err().expect("expected error");
+        err.assert_matches(
+            &TemplateMatchError::ExpectedEol,
+            (1, 0), (1, 0)
+        ).unwrap();
+    }
+
+    #[test]
+    fn leading_newlines_not_match_2() {
+        let err = match_item(
+            new_item(&[
+                Match::NewLine,
+                Match::NewLine,
+                Match::Text("hello".into()),
+            ]),
+            &[],
+            "\n\n\nhello"
+        ).err().expect("expected error");
+        err.assert_matches(
+            &TemplateMatchError::ExpectedText {
+                expected: "hello".into(),
+                found: "".into(),
+            },
+            (2, 0), (2, 0)
+        ).unwrap();
+    }
+
+    #[test]
+    fn trailing_newline_match() {
+        match_item(
+            new_item(&[
+                Match::Text("hello".into()),
+                Match::NewLine,
+            ]),
+            &[],
+            "hello\n"
+        ).expect("expected match");
+    }
+
+    #[test]
+    fn trailing_newline_not_match_1() {
+        let err = match_item(
+            new_item(&[
+                Match::Text("hello".into()),
+                Match::NewLine,
+            ]),
+            &[],
+            "hello\n\n"
+        ).err().expect("expected error");
+        err.assert_matches(
+            &TemplateMatchError::ExpectedEof,
+            (2, 0), (2, 0)
+        ).unwrap();
+    }
+
+    #[test]
+    fn trailing_newline_not_match_2() {
+        let err = match_item(
+            new_item(&[
+                Match::Text("hello".into()),
+                Match::NewLine,
+            ]),
+            &[],
+            "hello"
+        ).err().expect("expected error");
+        err.assert_matches(
+            &TemplateMatchError::ExpectedEol,
+            (0, 5), (0, 5)
+        ).unwrap();
+    }
+
+    #[test]
+    fn trailing_newlines_match() {
+        match_item(
+            new_item(&[
+                Match::Text("hello".into()),
+                Match::NewLine,
+                Match::NewLine,
+            ]),
+            &[],
+            "hello\n\n"
+        ).expect("expected match");
+    }
+
+    #[test]
+    fn trailing_newlines_not_match_1() {
+        let err = match_item(
+            new_item(&[
+                Match::Text("hello".into()),
+                Match::NewLine,
+                Match::NewLine,
+            ]),
+            &[],
+            "hello\n"
+        ).err().expect("expected error");
+        err.assert_matches(
+            &TemplateMatchError::ExpectedEol,
+            (1, 0), (1, 0)
+        ).unwrap();
+    }
+
+    #[test]
+    fn trailing_newlines_not_match_2() {
+        let err = match_item(
+            new_item(&[
+                Match::Text("hello".into()),
+                Match::NewLine,
+                Match::NewLine,
+            ]),
+            &[],
+            "hello\n\n\n"
+        ).err().expect("expected error");
+        err.assert_matches(
+            &TemplateMatchError::ExpectedEof,
+            (3, 0), (3, 0)
+        ).unwrap();
+    }
+
+    #[test]
+    fn multiple_text_items_separated_by_newline_match() {
+        match_item(
+            new_item(&[
+                Match::Text("hello".into()),
+                Match::NewLine,
+                Match::Text("world".into()),
+            ]),
+            &[],
+            "hello\nworld"
+        ).expect("expected match");
+    }
+
+    #[test]
+    fn multiple_text_items_separated_by_newline_not_match_1() {
+        let err = match_item(
+            new_item(&[
+                Match::Text("hello".into()),
+                Match::NewLine,
+                Match::Text("world".into()),
+            ]),
+            &[],
+            "hello\n\nworld"
+        ).err().expect("expected match");
+        err.assert_matches(
+            &TemplateMatchError::ExpectedText {
+                expected: "world".into(),
+                found: "".into(),
+            },
+            (1, 0), (1, 0)
+        ).unwrap();
+    }
+
+    #[test]
+    fn multiple_text_items_separated_by_newline_not_match_2() {
+        let err = match_item(
+            new_item(&[
+                Match::Text("hello".into()),
+                Match::NewLine,
+                Match::Text("world".into()),
+            ]),
+            &[],
+            "helloworld"
+        ).err().expect("expected match");
+        err.assert_matches(
+            &TemplateMatchError::ExpectedEol,
+            (0, 5), (0, 5)
+        ).unwrap();
+    }
+
+    #[test]
+    fn multiple_text_items_separated_by_newlines_match() {
+        match_item(
+            new_item(&[
+                Match::Text("hello".into()),
+                Match::NewLine,
+                Match::NewLine,
+                Match::Text("world".into()),
+            ]),
+            &[],
+            "hello\n\nworld"
+        ).expect("expected match");
+    }
+
+    #[test]
+    fn multiple_text_items_separated_by_newlines_not_match_1() {
+        let err = match_item(
+            new_item(&[
+                Match::Text("hello".into()),
+                Match::NewLine,
+                Match::NewLine,
+                Match::Text("world".into()),
+            ]),
+            &[],
+            "hello\nworld"
+        ).err().expect("expected error");
+        err.assert_matches(
+            &TemplateMatchError::ExpectedEol,
+            (1, 0), (1, 0)
+        ).unwrap();
+    }
+
+    #[test]
+    fn multiple_text_items_separated_by_newlines_not_match_2() {
+        let err = match_item(
+            new_item(&[
+                Match::Text("hello".into()),
+                Match::NewLine,
+                Match::NewLine,
+                Match::Text("world".into()),
+            ]),
+            &[],
+            "hello\n\n\nworld"
+        ).err().expect("expected error");
+        err.assert_matches(
+            &TemplateMatchError::ExpectedText {
+                expected: "world".into(),
+                found: "".into(),
+            },
+            (2, 0), (2, 0)
         ).unwrap();
     }
 }
