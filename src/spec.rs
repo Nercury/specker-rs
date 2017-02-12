@@ -102,6 +102,10 @@ impl<'s> Item<'s> {
     }
 
     fn get_multiline_match_groups(&'s self) -> Vec<MultilineMatchState<'s>> {
+
+        // this could be written to return an iterator, but I leave this work to someone from future
+        // good luck!
+
         let mut results = Vec::new();
         let mut prev_group: Option<Vec<&ast::Match>> = None;
 
@@ -156,21 +160,13 @@ impl<'s> Item<'s> {
         for state in line_groups {
             match state {
                 MultilineMatchState::MultipleLines => {
-                    println!("MultilineMatchState::MultipleLines");
                     skip_lines_state = true;
                 },
                 MultilineMatchState::Line(line) => {
-                    println!("MultilineMatchState::Line({:?})", line);
-
                     'text: loop {
-                        println!("loop text");
-
                         let pos_byte = pos.byte;
-                        match line.matches(pos, &contents) {
+                        match line.matches(pos, &contents, params) {
                             Ok((bytes, end_bytes)) => {
-                                println!("matches {:?}, {:?} at {:?}", bytes, end_bytes, unsafe { str::from_utf8_unchecked(&contents[pos.byte..eol_pos.byte]) });
-                                println!("has new line {:?}", had_new_line);
-
                                 if bytes == 0 && !had_new_line {
                                     return Err(TemplateMatchError::ExpectedEol.at(pos, pos));
                                 }
@@ -184,12 +180,9 @@ impl<'s> Item<'s> {
                                 break 'text;
                             }
                             Err(err_match) => if skip_lines_state {
-
-                                println!("no match, skip_lines_state");
-
                                 if pos_byte >= contents.len() {
                                     match err_match {
-                                        LineGroupMatchErr::Text { pos: err_pos, text: text } =>
+                                        LineGroupMatchErr::Text { pos: err_pos, text } =>
                                             return Err(
                                                 TemplateMatchError::ExpectedTextFoundEof(text.to_string())
                                                     .at(err_pos, eol_pos)
@@ -204,15 +197,18 @@ impl<'s> Item<'s> {
 
                                 continue 'text;
                             } else {
-                                println!("no match, return");
-
                                 match err_match {
-                                    LineGroupMatchErr::Text { pos: err_pos, text: text } => return Err(TemplateMatchError::ExpectedText {
-                                        expected: text.to_string(),
-                                        found: String::from_utf8_lossy(&contents[err_pos.byte..eol_pos.byte]).into_owned(),
-                                    }.at(err_pos, eol_pos)),
-                                    LineGroupMatchErr::NewLineOrEof { pos: err_pos } =>
-                                        return Err(TemplateMatchError::ExpectedEol.at(err_pos, err_pos)),
+                                    LineGroupMatchErr::Text { pos, text } =>
+                                        return Err(TemplateMatchError::ExpectedText {
+                                            expected: text.to_string(),
+                                            found: String::from_utf8_lossy(&contents[pos.byte..eol_pos.byte]).into_owned(),
+                                        }.at(pos, eol_pos)),
+                                    LineGroupMatchErr::ParamNotFound { pos, key } =>
+                                        return Err(TemplateMatchError::MissingParam(key.into())
+                                            .at(pos, pos)),
+                                    LineGroupMatchErr::NewLineOrEof { pos } =>
+                                        return Err(TemplateMatchError::ExpectedEol
+                                            .at(pos, pos)),
                                 }
                             }
                         }
@@ -280,6 +276,10 @@ enum LineGroupMatchErr<'a> {
         pos: FilePosition,
         text: &'a str,
     },
+    ParamNotFound {
+        pos: FilePosition,
+        key: &'a str,
+    },
     NewLineOrEof {
         pos: FilePosition,
     }
@@ -297,8 +297,9 @@ impl<'a> LineGroup<'a> {
         }
     }
 
-    pub fn matches<'o>(&'a self, mut pos: FilePosition, content: &'o [u8])
-        -> result::Result<(usize, usize), LineGroupMatchErr>
+    pub fn matches<'o, 'r>(&'a self, mut pos: FilePosition, content: &'o [u8], params: &HashMap<&str, &'r str>)
+        -> result::Result<(usize, usize), LineGroupMatchErr<'r>>
+        where 'a: 'r
     {
         let start_pos = pos;
 
@@ -309,7 +310,14 @@ impl<'a> LineGroup<'a> {
                 } else {
                     return Err(LineGroupMatchErr::Text { pos: pos, text: text });
                 },
-                ast::Match::Var(_) => unreachable!("not implemented var match"),
+                ast::Match::Var(ref key) => match params.get(&key[..]) {
+                    Some(ref text) => if let Some(bytes) = matches_content(&pos, content, text.as_bytes()) {
+                        pos.advance(bytes);
+                    } else {
+                        return Err(LineGroupMatchErr::Text { pos: pos, text: text });
+                    },
+                    None => return Err(LineGroupMatchErr::ParamNotFound { pos: pos, key: &key[..] }),
+                },
                 ast::Match::MultipleLines => unreachable!(),
                 ast::Match::NewLine => unreachable!(),
             }
@@ -322,24 +330,8 @@ impl<'a> LineGroup<'a> {
     }
 }
 
-fn matches_content_with_newline(pos: &FilePosition, content: &[u8], to_match: &[u8]) -> Option<(usize, usize)> {
-    if content[pos.byte..].starts_with(to_match) {
-        let end = &content[pos.byte + to_match.len()..];
-        if end.is_empty() {
-            return Some((to_match.len(), 0));
-        } else if end.starts_with(b"\n") {
-            return Some((to_match.len(), 1));
-        } else if end.starts_with(b"\r\n") {
-            return Some((to_match.len(), 2));
-        }
-    }
-
-    None
-}
-
 fn matches_content(pos: &FilePosition, content: &[u8], to_match: &[u8]) -> Option<usize> {
     if content[pos.byte..].starts_with(to_match) {
-        let end = &content[pos.byte + to_match.len()..];
         return Some(to_match.len());
     }
 

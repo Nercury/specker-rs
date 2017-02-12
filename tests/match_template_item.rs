@@ -508,4 +508,115 @@ mod match_template_item {
             (2, 0), (2, 0)
         ).unwrap();
     }
+
+    #[test]
+    fn multiple_text_items_separated_by_newlines_and_any_lines_match_1() {
+        match_item(
+            new_item(&[
+                Match::Text("hello".into()),
+                Match::NewLine,
+                Match::NewLine,
+                Match::MultipleLines,
+                Match::Text("world".into()),
+            ]),
+            &[],
+            "hello\n\n\nworld"
+        ).expect("expected match");
+    }
+
+    #[test]
+    fn multiple_text_items_separated_by_newlines_and_any_lines_match_2() {
+        match_item(
+            new_item(&[
+                Match::Text("hello".into()),
+                Match::NewLine,
+                Match::MultipleLines,
+                Match::NewLine,
+                Match::Text("world".into()),
+            ]),
+            &[],
+            "hello\n\n\nworld"
+        ).expect("expected match");
+    }
+
+    #[test]
+    fn multiple_text_items_separated_by_newlines_and_any_lines_match_3() {
+        match_item(
+            new_item(&[
+                Match::Text("hello".into()),
+                Match::MultipleLines,
+                Match::NewLine,
+                Match::NewLine,
+                Match::Text("world".into()),
+            ]),
+            &[],
+            "hello\n\n\nworld"
+        ).expect("expected match");
+    }
+
+    #[test]
+    fn var_match() {
+        match_item(
+            new_item(&[
+                Match::Var("hello".into()),
+            ]),
+            &[("hello", "world")],
+            "world"
+        ).expect("expected match");
+    }
+
+    #[test]
+    fn var_not_match() {
+        let err = match_item(
+            new_item(&[
+                Match::Var("hello".into()),
+            ]),
+            &[("hello", "word")],
+            "world"
+        ).err().expect("expected error");
+        err.assert_matches(
+            &TemplateMatchError::ExpectedText {
+                expected: "word".into(),
+                found: "world".into(),
+            },
+            (0, 0), (0, 5)
+        ).unwrap();
+    }
+
+    #[test]
+    fn multiple_var_match() {
+        match_item(
+            new_item(&[
+                Match::Var("hello".into()),
+                Match::Var("hello2".into()),
+            ]),
+            &[
+                ("hello2", "b"),
+                ("hello", "a")
+            ],
+            "ab"
+        ).expect("expected match");
+    }
+
+    #[test]
+    fn multiple_var_not_match() {
+        let err = match_item(
+            new_item(&[
+                Match::Var("hello".into()),
+                Match::Var("hello2".into()),
+            ]),
+            &[
+                ("hello2", "b"),
+                ("hello", "a")
+            ],
+            "a b"
+        ).err().expect("expected error");
+        err.assert_matches(
+            &TemplateMatchError::ExpectedText {
+                expected: "b".into(),
+                found: " b".into(),
+            },
+            (0, 1), (0, 3)
+        ).unwrap();
+    }
 }
