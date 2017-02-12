@@ -1,0 +1,18 @@
+sudo: false
+language: rust
+
+env:
+  global:
+    - CRATE=specker
+
+matrix:
+  allow_failures:
+    - rust: nightly
+  include:
+    - rust: nightly
+      env: DOC=true
+    - rust: beta
+    - rust: stable
+
+#after_success:
+#  - /bin/bash export_doc.sh

@@ -2,6 +2,12 @@
 name = "specker"
 version = "0.1.0"
 authors = ["Nerijus Arlauskas <nercury@gmail.com>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Nercury/specker-rs"
+description = "Testing utility that simplifies file matching against bunch of templates."
+readme = "README.md"
+keywords = ["spec", "testing", "utility", "dev"]
+categories = ["development-tools::testing"]
 
 [dependencies]
 walkdir = "1.0"

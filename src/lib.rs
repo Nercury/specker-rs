@@ -1,3 +1,93 @@
+// Copyright 2017 Nerijus Arlauskas
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+/*!
+
+Checks if any number of files match some specification.
+Designed for testing file generation.
+
+Let's say we have this specification:
+
+```ignore
+## file: output/index.html
+..
+<body>
+..
+## file: output/style.css
+..
+body {
+..
+}
+..
+```
+
+Specker can check if there is a file named `output/index.html` containing
+`<body>` in some line, as well as file `output/style.css`
+containing `body {` and `}` lines. Symbol `..` matches any number of
+lines.
+
+If there is a match error, specker can print a nice message like:
+
+```ignore
+1 | <bddy>
+  | ^^^^^^
+  | Expected "<body>", found "<bddy>"
+```
+
+It also has iterators to run many such specification tests
+in bulk.
+
+Example code that iterates the "spec" dir, collects all "txt" specifications
+and checks them:
+
+```ignore
+extern crate specker;
+
+use std::fs;
+use std::env;
+use std::path::PathBuf;
+use std::collections::HashMap;
+
+#[test]
+fn check_specifications() {
+    let src_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+
+    for maybe_spec in specker::walk_spec_dir(&spec_dir, "txt", specker::Options {
+        skip_lines: "..",
+        marker: "##",
+        var_start: "${",
+        var_end: "}",
+    }) {
+        let spec_file = maybe_spec.unwrap();
+
+        // go over spec items and check if file contents match
+        for (item, input_file_name) in spec_file.spec.iter()
+            .filter_map(
+                |item| item.get_param("file")
+                    .map(|param_value| (item, param_value))
+            )
+            {
+                let path = spec_dir.join(input_file_name);
+                let mut file = fs::File::open(&path)
+                    .expect(&format!("failed to open file {:?}", &path));
+
+                if let Err(e) = item.match_contents(&mut file, &HashMap::new()) {
+                    // print nicely formatted error
+                    println!("{}", specker::display_error(&path, &e));
+                    // print one-liner error
+                    panic!("{}", e);
+                }
+            }
+    }
+}
+```
+
+*/
+
 extern crate walkdir;
 
 mod ast;

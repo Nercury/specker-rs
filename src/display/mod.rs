@@ -1,3 +1,10 @@
+// Copyright 2017 Nerijus Arlauskas
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
 use std::fmt;
 use std::fs;
 use std::path::Path;
@@ -5,6 +12,7 @@ use std::io::BufRead;
 use std::io::BufReader;
 use At;
 
+/// Display nice error that combines line and column info with file contents.
 pub fn display_error<E: DisplayError>(path: &Path, e: &E) -> String {
     e.display_error(path)
 }
