@@ -109,6 +109,7 @@ impl ParseError {
     }
 }
 
+/// Error returned for failed template write.
 #[derive(Debug)]
 pub enum TemplateWriteError {
     CanNotWriteMatchAnySymbols,
@@ -155,6 +156,7 @@ impl From<::std::io::Error> for TemplateWriteError {
     }
 }
 
+/// Error returned for failed template match.
 #[derive(Debug)]
 pub enum TemplateMatchError {
     ExpectedEof,
@@ -288,7 +290,11 @@ impl<T: fmt::Debug> PartialEq for At<T> where T: Eq + PartialEq {
 
 impl<T: fmt::Debug> fmt::Display for At<T> where T: fmt::Display {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} at {} - {}", self.desc, self.lo, self.hi)
+        if self.lo == self.hi {
+            write!(f, "{} at {}", self.desc, self.lo)
+        } else {
+            write!(f, "{} at {} - {}", self.desc, self.lo, self.hi)
+        }
     }
 }
 

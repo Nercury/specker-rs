@@ -5,14 +5,19 @@ mod ast;
 mod tokens;
 mod spec;
 mod walk;
-pub mod error;
+mod error;
+mod display;
 
 pub use ast::{Param, Match};
 pub use spec::{Options, Spec, Item, ItemIter, ItemValuesByKeyIter};
-pub use walk::{SpecWalkIter, walk_spec_dir};
-
+pub use walk::{SpecWalkIter, SpecPath, walk_spec_dir};
+pub use error::TemplateMatchError;
+pub use error::TemplateWriteError;
+pub use error::At;
+pub use display::display_error;
 use std::{io, fmt, path, result};
 
+/// Specification iteration or parsing error.
 #[derive(Debug)]
 pub enum Error {
     WalkDir(walkdir::Error),
@@ -67,4 +72,5 @@ impl From<error::At<error::ParseError>> for Error {
     }
 }
 
+/// Specification iteration or parsing result.
 pub type Result<T> = result::Result<T, Error>;

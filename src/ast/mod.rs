@@ -2,31 +2,45 @@ use tokens::{self, TokenValue, TokenRef, TokenValueRef};
 use error::{FilePosition, ParseError, ParseResult};
 use std::iter::Peekable;
 
+/// Top item of specification AST.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Spec {
+    /// Specification items.
     pub items: Vec<Item>,
 }
 
+/// Specification item that corresponds to a file match pattern.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Item {
+    /// Item params used to differentiate items when running the specification match or write.
     pub params: Vec<Param>,
+    /// Parsed item tokens.
     pub template: Vec<Match>,
 }
 
+/// Specification item parameter.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Param {
+    /// Parameter key.
     pub key: String,
+    /// Parameter value.
     pub value: Option<String>,
 }
 
+/// Specification token.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Match {
+    /// Match one or more lines containing anything.
     MultipleLines,
+    /// Match a newline.
     NewLine,
+    /// Match specific text.
     Text(String),
+    /// Match a variable from a map that will be provided when running match.
     Var(String),
 }
 
+/// Specification parser.
 pub struct Parser<'s> {
     token_iter: Peekable<tokens::Iter<'s>>,
     pos: FilePosition,

@@ -8,14 +8,20 @@ use Result;
 use ast;
 use tokens;
 
+/// Specification parser options.
 #[derive(Copy, Clone, Debug)]
 pub struct Options<'a> {
+    /// String that marks multiple lines to be skipped.
     pub skip_lines: &'a str,
+    /// Prefix that marks the line as containing a parameter.
     pub marker: &'a str,
+    /// Var start prefix.
     pub var_start: &'a str,
+    /// Var end suffix.
     pub var_end: &'a str,
 }
 
+/// Parsed specification.
 #[derive(Debug, Clone)]
 pub struct Spec {
     ast: ast::Spec,
@@ -33,6 +39,7 @@ impl<'a> IntoIterator for &'a Spec {
 }
 
 impl Spec {
+    /// Parse specification from in-memory contents.
     pub fn parse<'a>(options: Options<'a>, contents: &'a [u8]) -> Result<Spec> {
         Ok(Spec {
             ast: ast::Parser::new(
@@ -41,7 +48,7 @@ impl Spec {
         })
     }
 
-    /// Returns an iterator over the items.
+    /// Returns an iterator over the specification items.
     pub fn iter<'r>(&'r self) -> ItemIter<'r> {
         self.into_iter()
     }
@@ -55,8 +62,12 @@ impl Spec {
     }
 }
 
+/// Specification item, that describes how a file should be matched against.
+#[derive(Debug)]
 pub struct Item<'s> {
+    /// Specification item params, used to differentiate between items.
     pub params: &'s [ast::Param],
+    /// Parsed specification AST.
     pub template: &'s [ast::Match],
 }
 
@@ -101,6 +112,7 @@ impl<'s> Item<'s> {
         Ok(())
     }
 
+    /// Separates tokens into groups where each groups is a line.
     fn get_multiline_match_groups(&'s self) -> Vec<MultilineMatchState<'s>> {
 
         // this could be written to return an iterator, but I leave this work to someone from future
@@ -143,6 +155,9 @@ impl<'s> Item<'s> {
         results
     }
 
+    /// Try to match specification to input and return any errors if they don't match.
+    ///
+    /// The values from `params` map will be substituted in as template vars.
     pub fn match_contents<I: Read>(&'s self, input: &mut I, params: &HashMap<&str, &str>)
                                    -> result::Result<(), At<TemplateMatchError>> {
         let mut pos = FilePosition::new();
@@ -225,45 +240,12 @@ impl<'s> Item<'s> {
 
         Ok(())
     }
-
-    //    pub fn match_file(&'s self, path: &path::Path, params: &HashMap<&str, &str>)
-    //                      -> result::Result<(), FileMatchError>
-    //    {
-    //        let mut file_contents = String::new();
-    //        let mut file = File::open(path)?;
-    //        file.read_to_string(&mut file_contents)?;
-    //
-    //        println!("FILE {:?}", file_contents);
-    //
-    //        Ok(())
-    //    }
-
-    //    /// Writes template contents to a file path constructed by joining the specified base path
-    //    /// and relative path in universal format. "Universal" here means that on windows "some/path"
-    //    /// is converted to "some\path".
-    //    pub fn write_file_relative(&'s self, base_path: &path::Path, universal_relative_path: &str, params: &HashMap<&str, &str>)
-    //                               -> result::Result<(), TemplateWriteError> {
-    //        self.write_file(
-    //            &base_path.join(
-    //                universal_path_to_platform_path(universal_relative_path)
-    //                    .as_ref()
-    //            ),
-    //            params
-    //        )
-    //    }
-
-    //    pub fn match_file_relative(&'s self, base_path: &path::Path, universal_relative_path: &str, params: &HashMap<&str, &str>)
-    //                               -> result::Result<(), FileMatchError> {
-    //        self.match_file(
-    //            &base_path.join(
-    //                universal_path_to_platform_path(universal_relative_path)
-    //                    .as_ref()
-    //            ),
-    //            params
-    //        )
-    //    }
 }
 
+/// Groups by line.
+///
+/// This separation was useful because the MultipleLines requires eager matching, which
+/// is different than line match.
 #[derive(Debug)]
 enum MultilineMatchState<'a> {
     MultipleLines,
@@ -285,6 +267,7 @@ enum LineGroupMatchErr<'a> {
     }
 }
 
+/// All tokens for a line.
 #[derive(Debug)]
 struct LineGroup<'a> {
     tokens: Vec<&'a ast::Match>,
@@ -297,6 +280,8 @@ impl<'a> LineGroup<'a> {
         }
     }
 
+    /// Check if a line match template tokens `MultipleLines` and `NewLine` are handled by the
+    /// called that separated tokens into lines.
     pub fn matches<'o, 'r>(&'a self, mut pos: FilePosition, content: &'o [u8], params: &HashMap<&str, &'r str>)
         -> result::Result<(usize, usize), LineGroupMatchErr<'r>>
         where 'a: 'r
@@ -370,6 +355,7 @@ fn update_eol(pos: &FilePosition, eol_pos: &mut FilePosition, contents: &[u8]) {
     *eol_pos = pos.advanced(eol - pos.byte);
 }
 
+/// Specification item iterator.
 pub struct ItemIter<'a> {
     inner: slice::Iter<'a, ast::Item>,
 }
@@ -382,6 +368,7 @@ impl<'a> Iterator for ItemIter<'a> {
     }
 }
 
+/// Iterator over the specification items that contain a specific key.
 pub struct ItemValuesByKeyIter<'a, 'p> {
     inner: ItemIter<'a>,
     key: &'p str,
@@ -402,19 +389,3 @@ impl<'a, 'p> Iterator for ItemValuesByKeyIter<'a, 'p> {
         }
     }
 }
-
-//#[cfg(not(target_os = "windows"))]
-//fn universal_path_to_platform_path(universal: &str) -> Cow<str> {
-//    Cow::Borrowed(universal)
-//}
-//
-//#[cfg(target_os = "windows")]
-//fn universal_path_to_platform_path(universal: &str) -> Cow<str> {
-//    Cow::Owned(s.chars()
-//        .map(|c| if c == '/' {
-//            '\\'
-//        } else {
-//            c
-//        })
-//        .collect::<String>())
-//}

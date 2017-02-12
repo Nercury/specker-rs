@@ -1,53 +1,12 @@
-## Specker
-
-Checks if any number of files match some specification.
-Designed for testing file generation.
-
-Let's say we have this specification:
-
-```
-## file: output/index.html
-..
-<body>
-..
-## file: output/style.css
-..
-body {
-..
-}
-..
-```
-
-Specker can check if there is a file named `output/index.html` containing
-`<body>` in some line, as well as file `output/style.css`
-containing `body {` and `}` lines. Symbol `..` matches any number of 
-lines.
-
-If there is a match error, specker can print a nice message like:
-
-```
-1 | <bddy>
-  | ^^^^^^
-  | Expected "<body>", found "<bddy>"
-```
-
-It also has iterators to run many such specification tests
-in bulk.
-
-Example code that iterates the "spec" dir, collects all "txt" specifications
-and checks them:
-
-```rust
 extern crate specker;
 
 use std::fs;
-use std::env;
 use std::path::PathBuf;
 use std::collections::HashMap;
 
-#[test]
-fn check_specifications() {
-    let src_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+fn main() {
+    let src_dir: PathBuf = PathBuf::from(file!()).parent().map(|p| p.into()).unwrap();
+    let spec_dir = src_dir.join("spec");
 
     for maybe_spec in specker::walk_spec_dir(&spec_dir, "txt", specker::Options {
         skip_lines: "..",
@@ -77,4 +36,3 @@ fn check_specifications() {
             }
     }
 }
-```

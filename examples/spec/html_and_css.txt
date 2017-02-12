@@ -1,0 +1,10 @@
+## file: output/index.html
+..
+<body>
+..
+## file: output/style.css
+..
+body {
+..
+}
+..
