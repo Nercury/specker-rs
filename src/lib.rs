@@ -62,10 +62,13 @@ fn check_specifications() {
         var_start: "${",
         var_end: "}",
     }) {
-        let spec_file = maybe_spec.unwrap();
+        let spec_path = maybe_spec.unwrap_or_else(|e| {
+            // print nicely formatted error
+            panic!("\n{}", specker::display_error(&e));
+        });
 
         // go over spec items and check if file contents match
-        for (item, input_file_name) in spec_file.spec.iter()
+        for (item, input_file_name) in spec_path.spec.iter()
             .filter_map(
                 |item| item.get_param("file")
                     .map(|param_value| (item, param_value))
