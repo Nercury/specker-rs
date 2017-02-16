@@ -16,7 +16,7 @@ use Result;
 #[derive(Debug, Clone)]
 pub struct SpecPath {
     pub spec: Spec,
-    pub file: PathBuf,
+    pub path: PathBuf,
 }
 
 /// Iterator over parsed specification files.
@@ -53,7 +53,7 @@ impl<'a> SpecWalkIter<'a> {
         Spec::parse(self.options, contents.as_bytes())
             .map(|spec| SpecPath {
                 spec: spec,
-                file: path.into(),
+                path: path.into(),
             })
     }
 }
