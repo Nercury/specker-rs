@@ -32,6 +32,7 @@ pub enum TokenValueRef<'a> {
     Var(&'a str),
 }
 
+/// Lexer token value.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TokenValue {
     Key(String),

@@ -10,8 +10,7 @@ use std::result;
 use std::io::{Read, Write};
 use std::slice;
 use std::str;
-use error::{TemplateWriteError, TemplateMatchError, At, FilePosition};
-use Result;
+use error::{ParseError, TemplateWriteError, TemplateMatchError, At, FilePosition};
 use ast;
 use tokens;
 
@@ -47,7 +46,7 @@ impl<'a> IntoIterator for &'a Spec {
 
 impl Spec {
     /// Parse specification from in-memory contents.
-    pub fn parse<'a>(options: Options<'a>, contents: &'a [u8]) -> Result<Spec> {
+    pub fn parse<'a>(options: Options<'a>, contents: &'a [u8]) -> result::Result<Spec, At<ParseError>> {
         Ok(Spec {
             ast: ast::Parser::new(
                 tokens::tokenize(options.into(), contents).peekable()

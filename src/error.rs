@@ -11,6 +11,7 @@ use std::str;
 use std::error::Error;
 use tokens::TokenValue;
 
+/// Spec lexer error.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum LexError {
     ExpectedSequenceFoundNewline {
@@ -57,6 +58,7 @@ impl From<str::Utf8Error> for LexError {
     }
 }
 
+/// Spec parser error.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ParseError {
     Lex(LexError),

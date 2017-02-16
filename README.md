@@ -72,7 +72,7 @@ fn check_specifications() {
 
                 if let Err(e) = item.match_contents(&mut file, &HashMap::new()) {
                     // print nicely formatted error
-                    println!("{}", specker::display_error(&path, &e));
+                    println!("{}", specker::display_error_for_file(&path, &e));
                     // print one-liner error
                     panic!("{}", e);
                 }

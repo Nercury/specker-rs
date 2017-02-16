@@ -47,14 +47,15 @@ impl<'a> Iterator for SpecWalkIter<'a> {
 
 impl<'a> SpecWalkIter<'a> {
     fn process_entry(&mut self, entry: &walkdir::DirEntry) -> Result<SpecPath> {
-        let path = entry.path();
+        let path: PathBuf = entry.path().into();
         let mut contents = String::new();
-        File::open(path)?.read_to_string(&mut contents)?;
+        File::open(&path)?.read_to_string(&mut contents)?;
         Spec::parse(self.options, contents.as_bytes())
             .map(|spec| SpecPath {
                 spec: spec,
-                path: path.into(),
+                path: (&path).clone(),
             })
+            .map_err(move |e| (path, e).into())
     }
 }
 

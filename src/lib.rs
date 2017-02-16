@@ -77,7 +77,7 @@ fn check_specifications() {
 
                 if let Err(e) = item.match_contents(&mut file, &HashMap::new()) {
                     // print nicely formatted error
-                    println!("{}", specker::display_error(&path, &e));
+                    println!("{}", specker::display_error_for_file(&path, &e));
                     // print one-liner error
                     panic!("{}", e);
                 }
@@ -100,10 +100,9 @@ mod display;
 pub use ast::{Param, Match};
 pub use spec::{Options, Spec, Item, ItemIter, ItemValuesByKeyIter};
 pub use walk::{SpecWalkIter, SpecPath, walk_spec_dir};
-pub use error::TemplateMatchError;
-pub use error::TemplateWriteError;
+pub use error::{ParseError, LexError, TemplateMatchError, TemplateWriteError};
 pub use error::At;
-pub use display::display_error;
+pub use display::{ display_error, display_error_for_file };
 use std::{io, fmt, path, result};
 
 /// Specification iteration or parsing error.
@@ -112,7 +111,10 @@ pub enum Error {
     WalkDir(walkdir::Error),
     Io(io::Error),
     StripPrefixError(path::StripPrefixError),
-    Parse(error::At<error::ParseError>),
+    Parse {
+        path: path::PathBuf,
+        err: error::At<error::ParseError>,
+    },
 }
 
 impl fmt::Display for Error {
@@ -121,7 +123,7 @@ impl fmt::Display for Error {
             Error::WalkDir(ref e) => e.fmt(f),
             Error::Io(ref e) => e.fmt(f),
             Error::StripPrefixError(ref e) => e.fmt(f),
-            Error::Parse(ref e) => e.fmt(f),
+            Error::Parse { ref path, err: ref e } => write!(f, "{} in {:?}", e, path),
         }
     }
 }
@@ -132,7 +134,7 @@ impl ::std::error::Error for Error {
             Error::WalkDir(ref e) => e.description(),
             Error::Io(ref e) => e.description(),
             Error::StripPrefixError(ref e) => e.description(),
-            Error::Parse(ref e) => e.description(),
+            Error::Parse { ref err, .. } => err.description(),
         }
     }
 }
@@ -155,9 +157,12 @@ impl From<path::StripPrefixError> for Error {
     }
 }
 
-impl From<error::At<error::ParseError>> for Error {
-    fn from(other: error::At<error::ParseError>) -> Error {
-        Error::Parse(other)
+impl From<(path::PathBuf, error::At<error::ParseError>)> for Error {
+    fn from((path, other): (path::PathBuf, error::At<error::ParseError>)) -> Error {
+        Error::Parse {
+            path: path,
+            err: other,
+        }
     }
 }
 

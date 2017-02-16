@@ -10,19 +10,38 @@ use std::fs;
 use std::path::Path;
 use std::io::BufRead;
 use std::io::BufReader;
-use At;
+use {At, Error};
 
 /// Display nice error that combines line and column info with file contents.
-pub fn display_error<E: DisplayError>(path: &Path, e: &E) -> String {
-    e.display_error(path)
+pub fn display_error<E: DisplayError>(e: &E) -> String {
+    e.display_error()
+}
+
+/// Display nice error that combines line and column info with file contents
+/// but error itself does not have file path info.
+pub fn display_error_for_file<E: DisplayErrorForFile>(path: &Path, e: &E) -> String {
+    e.display_error_for_file(path)
 }
 
 pub trait DisplayError {
-    fn display_error(&self, path: &Path) -> String;
+    fn display_error(&self) -> String;
 }
 
-impl<T> DisplayError for At<T> where T: fmt::Display + fmt::Debug {
-    fn display_error(&self, path: &Path) -> String {
+impl DisplayError for Error {
+    fn display_error(&self) -> String {
+        match *self {
+            Error::Parse { ref path, ref err } => err.display_error_for_file(path),
+            ref other => format!("{}", other),
+        }
+    }
+}
+
+pub trait DisplayErrorForFile {
+    fn display_error_for_file(&self, path: &Path) -> String;
+}
+
+impl<T> DisplayErrorForFile for At<T> where T: fmt::Display + fmt::Debug {
+    fn display_error_for_file(&self, path: &Path) -> String {
         let file = fs::File::open(path);
 
         let mut extra_message = None;
