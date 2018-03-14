@@ -105,7 +105,7 @@ pub use spec::{Options, Spec, Item, ItemIter, ItemValuesByKeyIter};
 pub use walk::{SpecWalkIter, SpecPath, walk_spec_dir};
 pub use error::{ParseError, LexError, TemplateMatchError, TemplateWriteError};
 pub use error::At;
-pub use display::{ display_error, display_error_for_file };
+pub use display::{ display_error, display_error_for_file, display_error_for_read };
 use std::{io, fmt, path, result};
 
 /// Specification iteration or parsing error.
