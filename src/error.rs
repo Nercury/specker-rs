@@ -121,6 +121,7 @@ impl ParseError {
 /// Error returned for failed template write.
 #[derive(Debug)]
 pub enum TemplateWriteError {
+    TemplateIsNotValidUtf8(::std::string::FromUtf8Error),
     CanNotWriteMatchAnySymbols,
     MissingParam(String),
     Io(::std::io::Error),
@@ -142,6 +143,7 @@ impl Eq for TemplateWriteError {}
 impl ::std::error::Error for TemplateWriteError {
     fn description(&self) -> &str {
         match *self {
+            TemplateWriteError::TemplateIsNotValidUtf8(_) => "can not write template to utf8 string",
             TemplateWriteError::CanNotWriteMatchAnySymbols => "can not write template symbol to match any lines",
             TemplateWriteError::MissingParam(_) => "missing template param",
             TemplateWriteError::Io(ref e) => e.description(),
@@ -152,6 +154,7 @@ impl ::std::error::Error for TemplateWriteError {
 impl fmt::Display for TemplateWriteError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
+            TemplateWriteError::TemplateIsNotValidUtf8(ref e) => write!(f, "Can not write template to utf8 string: {:?}", e),
             TemplateWriteError::CanNotWriteMatchAnySymbols => "Can not write template symbol to match any lines".fmt(f),
             TemplateWriteError::MissingParam(ref p) => write!(f, "Missing template param {:?}", p),
             TemplateWriteError::Io(ref e) => e.fmt(f),

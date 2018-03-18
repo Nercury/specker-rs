@@ -118,6 +118,12 @@ impl<'s> Item<'s> {
         Ok(())
     }
 
+    pub fn to_string(&self) -> result::Result<String, TemplateWriteError> {
+        let mut source = Vec::new();
+        self.write_contents(&mut source, &HashMap::new())?;
+        Ok(String::from_utf8(source).map_err(|e| TemplateWriteError::TemplateIsNotValidUtf8(e))?)
+    }
+
     /// Separates tokens into groups where each groups is a line.
     fn get_multiline_match_groups(&'s self) -> Vec<MultilineMatchState<'s>> {
 
