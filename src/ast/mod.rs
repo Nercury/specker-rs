@@ -5,9 +5,9 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use tokens::{self, TokenValue, TokenRef, TokenValueRef};
 use error::{FilePosition, ParseError, ParseResult};
 use std::iter::Peekable;
+use tokens::{self, TokenRef, TokenValue, TokenValueRef};
 
 /// Top item of specification AST.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -135,7 +135,7 @@ impl<'s> Parser<'s> {
                 TokenValueRef::MatchNewline => true,
                 TokenValueRef::Var(_) => true,
                 _ => false,
-            }
+            },
         })
     }
 
@@ -147,7 +147,7 @@ impl<'s> Parser<'s> {
                 TokenValueRef::Key(_) => Some(true),
                 TokenValueRef::Value(_) => return Err(ParseError::ExpectedKeyFoundValue.at(lo, hi)),
                 _ => Some(false),
-            }
+            },
         })
     }
 
@@ -158,49 +158,59 @@ impl<'s> Parser<'s> {
             Some(&Ok(TokenRef { value, .. })) => match value {
                 TokenValueRef::Value(_) => true,
                 _ => false,
-            }
+            },
         })
     }
 
     fn expect_template_token(&mut self) -> ParseResult<TokenValueRef<'s>> {
-        self.expect_token(|token: TokenValueRef<'s>| {
-            match token {
+        self.expect_token(
+            |token: TokenValueRef<'s>| match token {
                 TokenValueRef::MatchAnyNumberOfLines
                 | TokenValueRef::MatchText(_)
                 | TokenValueRef::MatchNewline
                 | TokenValueRef::Var(_) => Some(token),
                 _ => None,
-            }
-        }, || vec![
-        TokenValue::MatchAnyNumberOfLines,
-        TokenValue::MatchText(String::from("_")),
-        TokenValue::Var(String::from("_"))
-        ])
+            },
+            || {
+                vec![
+                    TokenValue::MatchAnyNumberOfLines,
+                    TokenValue::MatchText(String::from("_")),
+                    TokenValue::Var(String::from("_")),
+                ]
+            },
+        )
     }
 
     fn expect_key(&mut self) -> ParseResult<&'s str> {
-        self.expect_token(|token: TokenValueRef<'s>| {
-            if let TokenValueRef::Key(s) = token {
-                Some(s)
-            } else {
-                None
-            }
-        }, || vec![TokenValue::Key(String::from("_"))])
+        self.expect_token(
+            |token: TokenValueRef<'s>| {
+                if let TokenValueRef::Key(s) = token {
+                    Some(s)
+                } else {
+                    None
+                }
+            },
+            || vec![TokenValue::Key(String::from("_"))],
+        )
     }
 
     fn expect_value(&mut self) -> ParseResult<&'s str> {
-        self.expect_token(|token: TokenValueRef<'s>| {
-            if let TokenValueRef::Value(s) = token {
-                Some(s)
-            } else {
-                None
-            }
-        }, || vec![TokenValue::Value(String::from("_"))])
+        self.expect_token(
+            |token: TokenValueRef<'s>| {
+                if let TokenValueRef::Value(s) = token {
+                    Some(s)
+                } else {
+                    None
+                }
+            },
+            || vec![TokenValue::Value(String::from("_"))],
+        )
     }
 
-    fn expect_token<F, R, E>(&mut self, match_token: F, expected_token_value: E) -> ParseResult<R> where
+    fn expect_token<F, R, E>(&mut self, match_token: F, expected_token_value: E) -> ParseResult<R>
+    where
         F: Fn(TokenValueRef<'s>) -> Option<R>,
-        E: Fn() -> Vec<TokenValue>
+        E: Fn() -> Vec<TokenValue>,
     {
         match self.token_iter.next() {
             None => Err(ParseError::UnexpectedEndOfTokens.at(self.pos, self.pos)),
@@ -212,7 +222,7 @@ impl<'s> Parser<'s> {
                 } else {
                     Err(ParseError::ExpectedDifferentToken {
                         expected: expected_token_value(),
-                        found: value.into()
+                        found: value.into(),
                     }.at(lo, hi))
                 }
             }
@@ -223,20 +233,22 @@ impl<'s> Parser<'s> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokens::{Options, tokenize};
+    use tokens::{tokenize, Options};
 
     fn default_options() -> Options<'static> {
         Options {
             skip_lines: b"..",
             marker: b"##",
             var_start: b"${",
-            var_end: b"}"
+            var_end: b"}",
         }
     }
 
     #[test]
     fn test_parser() {
-        let tokens = tokenize(default_options(), b"## a: x
+        let tokens = tokenize(
+            default_options(),
+            b"## a: x
 ..
 Hello ${ X }
 Bye
@@ -245,47 +257,51 @@ Bye
 ## bbbb
 ${ X } woooo
 ${ Y }
-");
+",
+        );
         let mut parser = Parser::new(tokens.peekable());
         let spec = parser.parse_spec();
 
-        assert_eq!(spec.unwrap(), Spec {
-            items: vec![
-            Item {
-                params: vec![
-                Param {
-                    key: "a".into(),
-                    value: Some("x".into()),
-                }
-                ],
-                template: vec![
-                Match::MultipleLines,
-                Match::Text("Hello ".into()),
-                Match::Var("X".into()),
-                Match::NewLine,
-                Match::Text("Bye".into()),
-                Match::MultipleLines,
-                ],
-            },
-            Item {
-                params: vec![
-                Param {
-                    key: "a".into(),
-                    value: Some("y".into()),
-                },
-                Param {
-                    key: "bbbb".into(),
-                    value: None,
-                }
-                ],
-                template: vec![
-                Match::Var("X".into()),
-                Match::Text(" woooo".into()),
-                Match::NewLine,
-                Match::Var("Y".into()),
+        assert_eq!(
+            spec.unwrap(),
+            Spec {
+                items: vec![
+                    Item {
+                        params: vec![
+                            Param {
+                                key: "a".into(),
+                                value: Some("x".into()),
+                            },
+                        ],
+                        template: vec![
+                            Match::MultipleLines,
+                            Match::Text("Hello ".into()),
+                            Match::Var("X".into()),
+                            Match::NewLine,
+                            Match::Text("Bye".into()),
+                            Match::MultipleLines,
+                        ],
+                    },
+                    Item {
+                        params: vec![
+                            Param {
+                                key: "a".into(),
+                                value: Some("y".into()),
+                            },
+                            Param {
+                                key: "bbbb".into(),
+                                value: None,
+                            },
+                        ],
+                        template: vec![
+                            Match::Var("X".into()),
+                            Match::Text(" woooo".into()),
+                            Match::NewLine,
+                            Match::Var("Y".into()),
+                        ],
+                    },
                 ],
             }
-            ],
-        });
+        );
     }
 }

@@ -5,18 +5,16 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use std::error::Error;
 use std::fmt;
 use std::result;
 use std::str;
-use std::error::Error;
 use tokens::TokenValue;
 
 /// Spec lexer error.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum LexError {
-    ExpectedSequenceFoundNewline {
-        expected: Vec<u8>,
-    },
+    ExpectedSequenceFoundNewline { expected: Vec<u8> },
     ExpectedNewline,
     Utf8(str::Utf8Error),
 }
@@ -34,8 +32,11 @@ impl ::std::error::Error for LexError {
 impl fmt::Display for LexError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            LexError::ExpectedSequenceFoundNewline { ref expected } =>
-                write!(f, "Expected \"{}\", found new line", String::from_utf8_lossy(expected)),
+            LexError::ExpectedSequenceFoundNewline { ref expected } => write!(
+                f,
+                "Expected \"{}\", found new line",
+                String::from_utf8_lossy(expected)
+            ),
             LexError::ExpectedNewline => "Expected new line".fmt(f),
             LexError::Utf8(e) => e.fmt(f),
         }
@@ -66,7 +67,7 @@ pub enum ParseError {
     UnexpectedEndOfTokens,
     ExpectedDifferentToken {
         expected: Vec<TokenValue>,
-        found: TokenValue
+        found: TokenValue,
     },
 }
 
@@ -93,17 +94,19 @@ impl fmt::Display for ParseError {
             ParseError::Lex(ref e) => e.fmt(f),
             ParseError::ExpectedKeyFoundValue => "Expected key, found value".fmt(f),
             ParseError::UnexpectedEndOfTokens => "Unexpected end of file".fmt(f),
-            ParseError::ExpectedDifferentToken { ref expected, ref found } => {
-                write!(
-                    f,
-                    "Expected {}, buf found {}",
-                    expected.iter()
-                        .map(|t| format!("{}", t))
-                        .collect::<Vec<_>>()
-                        .join(" or "),
-                    found
-                )
-            },
+            ParseError::ExpectedDifferentToken {
+                ref expected,
+                ref found,
+            } => write!(
+                f,
+                "Expected {}, buf found {}",
+                expected
+                    .iter()
+                    .map(|t| format!("{}", t))
+                    .collect::<Vec<_>>()
+                    .join(" or "),
+                found
+            ),
         }
     }
 }
@@ -130,9 +133,17 @@ pub enum TemplateWriteError {
 impl PartialEq for TemplateWriteError {
     fn eq(&self, other: &TemplateWriteError) -> bool {
         match (self, other) {
-            (&TemplateWriteError::CanNotWriteMatchAnySymbols, &TemplateWriteError::CanNotWriteMatchAnySymbols) => true,
-            (&TemplateWriteError::MissingParam(ref a), &TemplateWriteError::MissingParam(ref b)) => a.eq(b),
-            (&TemplateWriteError::Io(ref a), &TemplateWriteError::Io(ref b)) => a.description() == b.description(),
+            (
+                &TemplateWriteError::CanNotWriteMatchAnySymbols,
+                &TemplateWriteError::CanNotWriteMatchAnySymbols,
+            ) => true,
+            (
+                &TemplateWriteError::MissingParam(ref a),
+                &TemplateWriteError::MissingParam(ref b),
+            ) => a.eq(b),
+            (&TemplateWriteError::Io(ref a), &TemplateWriteError::Io(ref b)) => {
+                a.description() == b.description()
+            }
             (_, _) => false,
         }
     }
@@ -143,8 +154,12 @@ impl Eq for TemplateWriteError {}
 impl ::std::error::Error for TemplateWriteError {
     fn description(&self) -> &str {
         match *self {
-            TemplateWriteError::TemplateIsNotValidUtf8(_) => "can not write template to utf8 string",
-            TemplateWriteError::CanNotWriteMatchAnySymbols => "can not write template symbol to match any lines",
+            TemplateWriteError::TemplateIsNotValidUtf8(_) => {
+                "can not write template to utf8 string"
+            }
+            TemplateWriteError::CanNotWriteMatchAnySymbols => {
+                "can not write template symbol to match any lines"
+            }
             TemplateWriteError::MissingParam(_) => "missing template param",
             TemplateWriteError::Io(ref e) => e.description(),
         }
@@ -154,8 +169,12 @@ impl ::std::error::Error for TemplateWriteError {
 impl fmt::Display for TemplateWriteError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            TemplateWriteError::TemplateIsNotValidUtf8(ref e) => write!(f, "Can not write template to utf8 string: {:?}", e),
-            TemplateWriteError::CanNotWriteMatchAnySymbols => "Can not write template symbol to match any lines".fmt(f),
+            TemplateWriteError::TemplateIsNotValidUtf8(ref e) => {
+                write!(f, "Can not write template to utf8 string: {:?}", e)
+            }
+            TemplateWriteError::CanNotWriteMatchAnySymbols => {
+                "Can not write template symbol to match any lines".fmt(f)
+            }
             TemplateWriteError::MissingParam(ref p) => write!(f, "Missing template param {:?}", p),
             TemplateWriteError::Io(ref e) => e.fmt(f),
         }
@@ -173,10 +192,7 @@ impl From<::std::io::Error> for TemplateWriteError {
 pub enum TemplateMatchError {
     ExpectedEof,
     ExpectedEol,
-    ExpectedText {
-        expected: String,
-        found: String
-    },
+    ExpectedText { expected: String, found: String },
     ExpectedTextFoundEof(String),
     MissingParam(String),
     Io(::std::io::Error),
@@ -200,16 +216,24 @@ impl PartialEq for TemplateMatchError {
             (
                 &TemplateMatchError::ExpectedText {
                     expected: ref expected_a,
-                    found: ref found_a
+                    found: ref found_a,
                 },
                 &TemplateMatchError::ExpectedText {
                     expected: ref expected_b,
-                    found: ref found_b
-                }
+                    found: ref found_b,
+                },
             ) => expected_a.eq(expected_b) && found_a.eq(found_b),
-            (&TemplateMatchError::ExpectedTextFoundEof(ref a), &TemplateMatchError::ExpectedTextFoundEof(ref b)) => a.eq(b),
-            (&TemplateMatchError::MissingParam(ref a), &TemplateMatchError::MissingParam(ref b)) => a.eq(b),
-            (&TemplateMatchError::Io(ref a), &TemplateMatchError::Io(ref b)) => a.description() == b.description(),
+            (
+                &TemplateMatchError::ExpectedTextFoundEof(ref a),
+                &TemplateMatchError::ExpectedTextFoundEof(ref b),
+            ) => a.eq(b),
+            (
+                &TemplateMatchError::MissingParam(ref a),
+                &TemplateMatchError::MissingParam(ref b),
+            ) => a.eq(b),
+            (&TemplateMatchError::Io(ref a), &TemplateMatchError::Io(ref b)) => {
+                a.description() == b.description()
+            }
             (_, _) => false,
         }
     }
@@ -235,8 +259,13 @@ impl fmt::Display for TemplateMatchError {
         match *self {
             TemplateMatchError::ExpectedEof => "Expected end of file".fmt(f),
             TemplateMatchError::ExpectedEol => "Expected end of line".fmt(f),
-            TemplateMatchError::ExpectedText { ref expected, ref found } => write!(f, "Expected {:?}, found {:?}", expected, found),
-            TemplateMatchError::ExpectedTextFoundEof(ref p) => write!(f, "Expected {:?}, found end of file", p),
+            TemplateMatchError::ExpectedText {
+                ref expected,
+                ref found,
+            } => write!(f, "Expected {:?}, found {:?}", expected, found),
+            TemplateMatchError::ExpectedTextFoundEof(ref p) => {
+                write!(f, "Expected {:?}, found end of file", p)
+            }
             TemplateMatchError::MissingParam(ref p) => write!(f, "Missing template param {:?}", p),
             TemplateMatchError::Io(ref e) => e.fmt(f),
         }
@@ -253,7 +282,10 @@ pub type LexResult<T> = result::Result<T, At<LexError>>;
 pub type ParseResult<T> = result::Result<T, At<ParseError>>;
 
 #[derive(Debug, Clone)]
-pub struct At<T> where T: fmt::Debug {
+pub struct At<T>
+where
+    T: fmt::Debug,
+{
     /// The low position at which this error is pointing at.
     pub lo: FilePosition,
     /// One byte beyond the last character at which this error is pointing at.
@@ -263,44 +295,73 @@ pub struct At<T> where T: fmt::Debug {
 }
 
 impl<T: fmt::Debug> At<T> {
-    pub fn assert_matches(&self, other_err: &T, lo: (usize, usize), hi: (usize, usize)) -> result::Result<(), String> where T: PartialEq {
+    pub fn assert_matches(
+        &self,
+        other_err: &T,
+        lo: (usize, usize),
+        hi: (usize, usize),
+    ) -> result::Result<(), String>
+    where
+        T: PartialEq,
+    {
         if !self.desc.eq(other_err) {
             return Err(format!("{:?} does not match {:?}", self.desc, other_err));
         }
 
         if self.lo.line != lo.0 {
-            return Err(format!("expected error start line at {}, found {}", lo.0, self.lo.line));
+            return Err(format!(
+                "expected error start line at {}, found {}",
+                lo.0, self.lo.line
+            ));
         }
 
         if self.hi.line != hi.0 {
-            return Err(format!("expected error end line at {}, found {}", hi.0, self.hi.line));
+            return Err(format!(
+                "expected error end line at {}, found {}",
+                hi.0, self.hi.line
+            ));
         }
 
         if self.lo.col != lo.1 {
-            return Err(format!("expected error start col at {}, found {}", lo.1, self.lo.col));
+            return Err(format!(
+                "expected error start col at {}, found {}",
+                lo.1, self.lo.col
+            ));
         }
 
         if self.hi.col != hi.1 {
-            return Err(format!("expected error end col at {}, found {}", hi.1, self.hi.col));
+            return Err(format!(
+                "expected error end col at {}, found {}",
+                hi.1, self.hi.col
+            ));
         }
 
         Ok(())
     }
 }
 
-impl<T: fmt::Debug> ::std::error::Error for At<T> where T: ::std::error::Error {
+impl<T: fmt::Debug> ::std::error::Error for At<T>
+where
+    T: ::std::error::Error,
+{
     fn description(&self) -> &str {
         self.desc.description()
     }
 }
 
-impl<T: fmt::Debug> PartialEq for At<T> where T: Eq + PartialEq {
+impl<T: fmt::Debug> PartialEq for At<T>
+where
+    T: Eq + PartialEq,
+{
     fn eq(&self, other: &At<T>) -> bool {
         self.desc == other.desc
     }
 }
 
-impl<T: fmt::Debug> fmt::Display for At<T> where T: fmt::Display {
+impl<T: fmt::Debug> fmt::Display for At<T>
+where
+    T: fmt::Display,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.lo == self.hi {
             write!(f, "{} at {}", self.desc, self.lo)

@@ -7,10 +7,10 @@
 
 use std::fmt;
 use std::fs;
-use std::path::Path;
-use std::io::Read;
 use std::io::BufRead;
 use std::io::BufReader;
+use std::io::Read;
+use std::path::Path;
 use {At, Error};
 
 /// Display nice error that combines line and column info with file contents.
@@ -25,7 +25,11 @@ pub fn display_error_for_file<E: DisplayErrorForFile>(path: &Path, e: &E) -> Str
 }
 
 /// Display nice error that combines line and column info with file source contents.
-pub fn display_error_for_read<E: DisplayErrorForRead, I: Read>(path: &Path, input: &mut I, e: &E) -> String {
+pub fn display_error_for_read<E: DisplayErrorForRead, I: Read>(
+    path: &Path,
+    input: &mut I,
+    e: &E,
+) -> String {
     e.display_error_for_read(path, input)
 }
 
@@ -50,11 +54,15 @@ pub trait DisplayErrorForFile {
     fn display_error_for_file(&self, path: &Path) -> String;
 }
 
-impl<T> DisplayErrorForFile for At<T> where T: fmt::Display + fmt::Debug {
+impl<T> DisplayErrorForFile for At<T>
+where
+    T: fmt::Display + fmt::Debug,
+{
     fn display_error_for_file(&self, path: &Path) -> String {
         let mut file = fs::File::open(path).expect("failed to open file");
 
-        if self.lo.line == self.hi.line { // does not handle errors that span multiple lines
+        if self.lo.line == self.hi.line {
+            // does not handle errors that span multiple lines
             return self.display_error_for_read(path, &mut file);
         }
 
@@ -62,9 +70,11 @@ impl<T> DisplayErrorForFile for At<T> where T: fmt::Display + fmt::Debug {
     }
 }
 
-impl<T> DisplayErrorForRead for At<T> where T: fmt::Display + fmt::Debug {
+impl<T> DisplayErrorForRead for At<T>
+where
+    T: fmt::Display + fmt::Debug,
+{
     fn display_error_for_read<I: Read>(&self, display_file_name: &Path, file: &mut I) -> String {
-
         let mut extra_message = None;
 
         let mut lines: Option<Vec<String>> = None;
@@ -72,7 +82,11 @@ impl<T> DisplayErrorForRead for At<T> where T: fmt::Display + fmt::Debug {
         for (i, rd_line) in BufReader::new(file).lines().enumerate() {
             if let Ok(rd_line) = rd_line {
                 if i + 3 > self.lo.line && i <= self.lo.line {
-                    let line = if rd_line.len() > 80 { format!("{}..", &rd_line[..78]) } else { rd_line.to_string() };
+                    let line = if rd_line.len() > 80 {
+                        format!("{}..", &rd_line[..78])
+                    } else {
+                        rd_line.to_string()
+                    };
                     if let Some(ref mut lines) = lines {
                         lines.push(line);
                     } else {
@@ -113,7 +127,7 @@ impl<T> DisplayErrorForRead for At<T> where T: fmt::Display + fmt::Debug {
                 sb.push_str(" ");
             }
             sb.push_str("^");
-            for _ in self.lo.col+1..self.hi.col {
+            for _ in self.lo.col + 1..self.hi.col {
                 sb.push_str("^");
             }
 
@@ -140,7 +154,10 @@ impl<T> DisplayErrorForRead for At<T> where T: fmt::Display + fmt::Debug {
             if self.lo == self.hi {
                 format!("{} in {:?} at {}", &self.desc, display_file_name, self.lo)
             } else {
-                format!("{} in {:?} at {} - {}", &self.desc, display_file_name, self.lo, self.hi)
+                format!(
+                    "{} in {:?} at {} - {}",
+                    &self.desc, display_file_name, self.lo, self.hi
+                )
             }
         }
     }
