@@ -22,7 +22,7 @@ pub struct SpecPath {
 /// Iterator over parsed specification files.
 pub struct SpecWalkIter<'a> {
     extension: &'a str,
-    walk_dir: walkdir::Iter,
+    walk_dir: walkdir::IntoIter,
     options: Options<'a>,
 }
 

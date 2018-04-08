@@ -1,6 +1,6 @@
 [package]
 name = "specker"
-version = "0.3.3"
+version = "0.3.4"
 authors = ["Nerijus Arlauskas <nercury@gmail.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Nercury/specker-rs"
@@ -11,7 +11,7 @@ keywords = ["spec", "testing", "utility", "dev"]
 categories = ["development-tools::testing"]
 
 [dependencies]
-walkdir = "1.0"
+walkdir = "2"
 
 [badges]
 travis-ci = { repository = "Nercury/specker-rs" }
