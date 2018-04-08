@@ -81,7 +81,9 @@ pub fn expect_text<'a>(cursor: &mut FilePosition, input: &'a [u8]) -> LexResult<
     let start_cursor = cursor.clone();
     let mut end = start_cursor.byte;
     loop {
-        if end >= input.len() || input[end..].starts_with(b"\n") || input[end..].starts_with(b"\r\n") {
+        if end >= input.len() || input[end..].starts_with(b"\n")
+            || input[end..].starts_with(b"\r\n")
+        {
             break;
         }
 
@@ -92,24 +94,36 @@ pub fn expect_text<'a>(cursor: &mut FilePosition, input: &'a [u8]) -> LexResult<
     return Ok(Contents::new(input, start_cursor, *cursor));
 }
 
-pub fn expect_terminated_text<'a, 'e>(cursor: &mut FilePosition, input: &'a [u8], term_sequence: &'e [u8]) -> LexResult<(Contents<'a>, TermType)> {
+pub fn expect_terminated_text<'a, 'e>(
+    cursor: &mut FilePosition,
+    input: &'a [u8],
+    term_sequence: &'e [u8],
+) -> LexResult<(Contents<'a>, TermType)> {
     let start_cursor = cursor.clone();
     let mut end = start_cursor.byte;
     loop {
-        if end >= input.len() || input[end..].starts_with(b"\n") || input[end..].starts_with(b"\r\n") {
+        if end >= input.len() || input[end..].starts_with(b"\n")
+            || input[end..].starts_with(b"\r\n")
+        {
             break;
         }
         if input[end..].starts_with(term_sequence) {
             let end_cursor = cursor.advanced(end - start_cursor.byte);
             cursor.advance(end - start_cursor.byte + term_sequence.len());
-            return Ok((Contents::new(input, start_cursor, end_cursor), TermType::Sequence));
+            return Ok((
+                Contents::new(input, start_cursor, end_cursor),
+                TermType::Sequence,
+            ));
         }
 
         end += 1;
     }
 
     cursor.advance(end - start_cursor.byte);
-    return Ok((Contents::new(input, start_cursor, *cursor), TermType::EolOrEof));
+    return Ok((
+        Contents::new(input, start_cursor, *cursor),
+        TermType::EolOrEof,
+    ));
 }
 
 #[cfg(test)]
@@ -118,12 +132,20 @@ mod tests {
     use error::FilePosition;
 
     fn trim(text: &[u8]) -> &[u8] {
-        let c = Contents::new(text, FilePosition::new(), FilePosition::new().advanced(text.len()));
+        let c = Contents::new(
+            text,
+            FilePosition::new(),
+            FilePosition::new().advanced(text.len()),
+        );
         c.trimmed().slice
     }
 
     fn trim_pos<'a>(text: &'a [u8]) -> Contents<'a> {
-        let c = Contents::new(text, FilePosition::new(), FilePosition::new().advanced(text.len()));
+        let c = Contents::new(
+            text,
+            FilePosition::new(),
+            FilePosition::new().advanced(text.len()),
+        );
         c.trimmed()
     }
 

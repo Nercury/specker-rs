@@ -94,19 +94,19 @@ fn check_specifications() {
 extern crate walkdir;
 
 mod ast;
-mod tokens;
-mod spec;
-mod walk;
-mod error;
 mod display;
+mod error;
+mod spec;
+mod tokens;
+mod walk;
 
-pub use ast::{Param, Match};
-pub use spec::{Options, Spec, Item, ItemIter, ItemValuesByKeyIter};
-pub use walk::{SpecWalkIter, SpecPath, walk_spec_dir};
-pub use error::{ParseError, LexError, TemplateMatchError, TemplateWriteError};
+pub use ast::{Match, Param};
+pub use display::{display_error, display_error_for_file, display_error_for_read};
 pub use error::At;
-pub use display::{ display_error, display_error_for_file, display_error_for_read };
-use std::{io, fmt, path, result};
+pub use error::{LexError, ParseError, TemplateMatchError, TemplateWriteError};
+pub use spec::{Item, ItemIter, ItemValuesByKeyIter, Options, Spec};
+use std::{fmt, io, path, result};
+pub use walk::{walk_spec_dir, SpecPath, SpecWalkIter};
 
 /// Specification iteration or parsing error.
 #[derive(Debug)]
@@ -126,7 +126,10 @@ impl fmt::Display for Error {
             Error::WalkDir(ref e) => e.fmt(f),
             Error::Io(ref e) => e.fmt(f),
             Error::StripPrefixError(ref e) => e.fmt(f),
-            Error::Parse { ref path, err: ref e } => write!(f, "{} in {:?}", e, path),
+            Error::Parse {
+                ref path,
+                err: ref e,
+            } => write!(f, "{} in {:?}", e, path),
         }
     }
 }

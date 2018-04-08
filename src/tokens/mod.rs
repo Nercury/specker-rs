@@ -8,10 +8,10 @@
 mod combinator;
 
 use error::{At, FilePosition, LexError, LexResult};
-use std::collections::VecDeque;
-use std::str;
-use std::fmt;
 use spec;
+use std::collections::VecDeque;
+use std::fmt;
+use std::str;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct TokenRef<'a> {
@@ -91,12 +91,12 @@ impl<'a> From<spec::Options<'a>> for Options<'a> {
 #[derive(Copy, Clone, Debug)]
 enum LexState {
     LineStart {
-        content_line_end: Option<(FilePosition, FilePosition)>
+        content_line_end: Option<(FilePosition, FilePosition)>,
     },
     ParamKey,
     ParamValue,
     ContentStart {
-        content_line_end: Option<(FilePosition, FilePosition)>
+        content_line_end: Option<(FilePosition, FilePosition)>,
     },
     Var,
     ContentContinued,
@@ -122,113 +122,150 @@ pub struct Iter<'a> {
 
 impl<'a> Iter<'a> {
     fn token(&mut self, token: TokenValueRef<'a>, lo: FilePosition, hi: FilePosition) {
-        self.tokens.push_back(TokenRef { value: token, lo: lo, hi: hi });
+        self.tokens.push_back(TokenRef {
+            value: token,
+            lo: lo,
+            hi: hi,
+        });
     }
 
     fn eat_bytes(&mut self, mut state: LexState) -> LexResult<LexState> {
         while self.tokens.is_empty() {
             state = match state {
                 LexState::LineStart { content_line_end } => {
-                    if combinator::check_exact_bytes(&mut self.cursor, self.input, self.options.marker) {
+                    if combinator::check_exact_bytes(
+                        &mut self.cursor,
+                        self.input,
+                        self.options.marker,
+                    ) {
                         LexState::ParamKey
                     } else {
-                        LexState::ContentStart { content_line_end: content_line_end }
+                        LexState::ContentStart {
+                            content_line_end: content_line_end,
+                        }
                     }
-                },
+                }
                 LexState::ParamKey => {
-                    let (contents, termination) = combinator::expect_terminated_text(&mut self.cursor, self.input, b":")?;
+                    let (contents, termination) =
+                        combinator::expect_terminated_text(&mut self.cursor, self.input, b":")?;
                     let trimmed = contents.trimmed();
                     self.token(
                         TokenValueRef::Key(str::from_utf8(trimmed.slice)
                             .map_err(|e| LexError::from(e).at(trimmed.lo, trimmed.hi))?),
                         trimmed.lo,
-                        trimmed.hi
+                        trimmed.hi,
                     );
                     match termination {
                         combinator::TermType::EolOrEof => LexState::Eol,
                         combinator::TermType::Sequence => LexState::ParamValue,
                     }
-                },
+                }
                 LexState::ParamValue => {
                     let name = combinator::expect_text(&mut self.cursor, self.input)?.trimmed();
-                    self.token(TokenValueRef::Value(
-                        str::from_utf8(name.slice)
-                            .map_err(|e| LexError::from(e).at(name.lo, name.hi))?
-                    ), name.lo, name.hi);
+                    self.token(
+                        TokenValueRef::Value(str::from_utf8(name.slice)
+                            .map_err(|e| LexError::from(e).at(name.lo, name.hi))?),
+                        name.lo,
+                        name.hi,
+                    );
                     LexState::Eol
-                },
+                }
                 LexState::ContentStart { content_line_end } => {
-                    if combinator::check_exact_bytes(&mut self.cursor, self.input, self.options.skip_lines) {
+                    if combinator::check_exact_bytes(
+                        &mut self.cursor,
+                        self.input,
+                        self.options.skip_lines,
+                    ) {
                         let pos = self.cursor.clone();
                         if combinator::check_new_line(&mut self.cursor, self.input) {
                             self.token(TokenValueRef::MatchAnyNumberOfLines, pos, pos);
-                            LexState::LineStart { content_line_end: None }
+                            LexState::LineStart {
+                                content_line_end: None,
+                            }
                         } else {
                             if self.cursor.byte == self.input.len() {
                                 self.token(TokenValueRef::MatchAnyNumberOfLines, pos, pos);
                                 LexState::Eol
                             } else {
-                                return Err(LexError::ExpectedNewline.at(self.cursor.clone(), self.cursor.clone()));
+                                return Err(LexError::ExpectedNewline
+                                    .at(self.cursor.clone(), self.cursor.clone()));
                             }
                         }
                     } else {
                         if let Some((new_line_start, new_line_end)) = content_line_end {
                             if !combinator::check_eof(&mut self.cursor, self.input) {
-                                self.token(TokenValueRef::MatchNewline, new_line_start, new_line_end);
+                                self.token(
+                                    TokenValueRef::MatchNewline,
+                                    new_line_start,
+                                    new_line_end,
+                                );
                             }
                         }
                         LexState::ContentContinued
                     }
-                },
+                }
                 LexState::Var => {
                     let (contents, termination) = combinator::expect_terminated_text(
-                        &mut self.cursor, self.input, self.options.var_end)?;
+                        &mut self.cursor,
+                        self.input,
+                        self.options.var_end,
+                    )?;
                     match termination {
-                        combinator::TermType::EolOrEof => return Err(LexError::ExpectedSequenceFoundNewline {
-                            expected: self.options.var_end.into()
-                        }.at(self.cursor.clone(), self.cursor.clone())),
+                        combinator::TermType::EolOrEof => {
+                            return Err(LexError::ExpectedSequenceFoundNewline {
+                                expected: self.options.var_end.into(),
+                            }.at(self.cursor.clone(), self.cursor.clone()))
+                        }
                         combinator::TermType::Sequence => {
                             let trimmed = contents.trimmed();
-                            self.token(TokenValueRef::Var(
-                                str::from_utf8(trimmed.slice)
-                                    .map_err(|e| LexError::from(e).at(trimmed.lo, trimmed.hi))?
-                            ), trimmed.lo, trimmed.hi);
+                            self.token(
+                                TokenValueRef::Var(str::from_utf8(trimmed.slice)
+                                    .map_err(|e| LexError::from(e).at(trimmed.lo, trimmed.hi))?),
+                                trimmed.lo,
+                                trimmed.hi,
+                            );
                             LexState::ContentContinued
                         }
                     }
-                },
+                }
                 LexState::ContentContinued => {
-                    let (contents, termination) = combinator::expect_terminated_text(&mut self.cursor, self.input, self.options.var_start)?;
+                    let (contents, termination) = combinator::expect_terminated_text(
+                        &mut self.cursor,
+                        self.input,
+                        self.options.var_start,
+                    )?;
                     if contents.slice.len() > 0 {
                         self.token(
-                            TokenValueRef::MatchText(
-                                str::from_utf8(contents.slice)
-                                    .map_err(|e| LexError::from(e).at(contents.lo, contents.hi))?
-                            ),
+                            TokenValueRef::MatchText(str::from_utf8(contents.slice)
+                                .map_err(|e| LexError::from(e).at(contents.lo, contents.hi))?),
                             contents.lo,
-                            contents.hi
+                            contents.hi,
                         );
                     }
                     match termination {
                         combinator::TermType::EolOrEof => LexState::ContentEol,
                         combinator::TermType::Sequence => LexState::Var,
                     }
-                },
+                }
                 LexState::ContentEol => {
                     let lo = self.cursor.clone();
                     if combinator::check_new_line(&mut self.cursor, self.input) {
-                        LexState::LineStart { content_line_end: Some((lo, self.cursor.clone())) }
+                        LexState::LineStart {
+                            content_line_end: Some((lo, self.cursor.clone())),
+                        }
                     } else {
                         break;
                     }
-                },
+                }
                 LexState::Eol => {
                     if combinator::check_new_line(&mut self.cursor, self.input) {
-                        LexState::LineStart { content_line_end: None }
+                        LexState::LineStart {
+                            content_line_end: None,
+                        }
                     } else {
                         break;
                     }
-                },
+                }
             };
         }
 
@@ -244,22 +281,22 @@ impl<'a> Iterator for Iter<'a> {
             let return_error = match self.state {
                 IterState::End => {
                     return None;
-                },
-                IterState::Error(ref e) => {
-                    Some(Err(e.clone()))
-                },
+                }
+                IterState::Error(ref e) => Some(Err(e.clone())),
                 IterState::Lex(s) => {
                     match self.tokens.pop_front() {
                         Some(token) => return Some(Ok(token)),
-                        None => self.state = match self.eat_bytes(s) {
-                            Ok(lex_state) => {
-                                if self.tokens.is_empty() {
-                                    IterState::End
-                                } else {
-                                    IterState::Lex(lex_state)
+                        None => {
+                            self.state = match self.eat_bytes(s) {
+                                Ok(lex_state) => {
+                                    if self.tokens.is_empty() {
+                                        IterState::End
+                                    } else {
+                                        IterState::Lex(lex_state)
+                                    }
                                 }
-                            },
-                            Err(e) => IterState::Error(e),
+                                Err(e) => IterState::Error(e),
+                            }
                         }
                     };
                     continue;
@@ -277,7 +314,9 @@ impl<'a> Iterator for Iter<'a> {
 pub fn tokenize<'a>(options: Options<'a>, input: &'a [u8]) -> Iter<'a> {
     Iter {
         options: options,
-        state: IterState::Lex(LexState::LineStart { content_line_end: None }),
+        state: IterState::Lex(LexState::LineStart {
+            content_line_end: None,
+        }),
         tokens: VecDeque::new(),
         cursor: FilePosition::new(),
         input: input,
@@ -293,7 +332,7 @@ mod tests {
             skip_lines: b"..",
             marker: b"##",
             var_start: b"${",
-            var_end: b"}"
+            var_end: b"}",
         }
     }
 
@@ -306,10 +345,7 @@ mod tests {
 
     #[test]
     fn test_single_param_line() {
-        let mut tokens = tokenize(
-            default_options(),
-            b"## lib: hello"
-        );
+        let mut tokens = tokenize(default_options(), b"## lib: hello");
 
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Key("lib"));
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Value("hello"));
@@ -318,12 +354,12 @@ mod tests {
 
     #[test]
     fn test_single_content_line() {
-        let mut tokens = tokenize(
-            default_options(),
-            b"Blah blah blah"
-        );
+        let mut tokens = tokenize(default_options(), b"Blah blah blah");
 
-        assert_eq!(expect_next(&mut tokens), TokenValueRef::MatchText("Blah blah blah"));
+        assert_eq!(
+            expect_next(&mut tokens),
+            TokenValueRef::MatchText("Blah blah blah")
+        );
         assert_eq!(tokens.next(), None);
     }
 
@@ -383,8 +419,11 @@ mod tests {
     fn test_multi_line_params_and_content() {
         let mut tokens;
 
-        tokens = tokenize(default_options(), b"## lib: hello
-${ X }");
+        tokens = tokenize(
+            default_options(),
+            b"## lib: hello
+${ X }",
+        );
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Key("lib"));
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Value("hello"));
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Var("X"));
@@ -395,25 +434,40 @@ ${ X }");
     fn test_multi_line_params_and_content_with_skipped_lines() {
         let mut tokens;
 
-        tokens = tokenize(default_options(), b"## lib: hello
+        tokens = tokenize(
+            default_options(),
+            b"## lib: hello
 ..
 ${ X }
-..");
+..",
+        );
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Key("lib"));
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Value("hello"));
-        assert_eq!(expect_next(&mut tokens), TokenValueRef::MatchAnyNumberOfLines);
+        assert_eq!(
+            expect_next(&mut tokens),
+            TokenValueRef::MatchAnyNumberOfLines
+        );
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Var("X"));
-        assert_eq!(expect_next(&mut tokens), TokenValueRef::MatchAnyNumberOfLines);
+        assert_eq!(
+            expect_next(&mut tokens),
+            TokenValueRef::MatchAnyNumberOfLines
+        );
         assert_eq!(tokens.next(), None);
 
-        tokens = tokenize(default_options(), b"## lib: hello
+        tokens = tokenize(
+            default_options(),
+            b"## lib: hello
 ${ X }
 ..
-");
+",
+        );
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Key("lib"));
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Value("hello"));
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Var("X"));
-        assert_eq!(expect_next(&mut tokens), TokenValueRef::MatchAnyNumberOfLines);
+        assert_eq!(
+            expect_next(&mut tokens),
+            TokenValueRef::MatchAnyNumberOfLines
+        );
         assert_eq!(tokens.next(), None);
     }
 
@@ -421,15 +475,24 @@ ${ X }
     fn test_multi_line_content_with_params() {
         let mut tokens;
 
-        tokens = tokenize(default_options(), b"..
+        tokens = tokenize(
+            default_options(),
+            b"..
 ${ X }
 ..
 ## a: b
 ## c: d
-");
-        assert_eq!(expect_next(&mut tokens), TokenValueRef::MatchAnyNumberOfLines);
+",
+        );
+        assert_eq!(
+            expect_next(&mut tokens),
+            TokenValueRef::MatchAnyNumberOfLines
+        );
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Var("X"));
-        assert_eq!(expect_next(&mut tokens), TokenValueRef::MatchAnyNumberOfLines);
+        assert_eq!(
+            expect_next(&mut tokens),
+            TokenValueRef::MatchAnyNumberOfLines
+        );
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Key("a"));
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Value("b"));
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Key("c"));
@@ -441,22 +504,31 @@ ${ X }
     fn test_multi_line_varying_content_and_params() {
         let mut tokens;
 
-        tokens = tokenize(default_options(), b"## a: b
+        tokens = tokenize(
+            default_options(),
+            b"## a: b
 f ${ X } b
 ..
 ## c: d
 ..
 k ${ Y } z
-");
+",
+        );
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Key("a"));
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Value("b"));
         assert_eq!(expect_next(&mut tokens), TokenValueRef::MatchText("f "));
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Var("X"));
         assert_eq!(expect_next(&mut tokens), TokenValueRef::MatchText(" b"));
-        assert_eq!(expect_next(&mut tokens), TokenValueRef::MatchAnyNumberOfLines);
+        assert_eq!(
+            expect_next(&mut tokens),
+            TokenValueRef::MatchAnyNumberOfLines
+        );
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Key("c"));
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Value("d"));
-        assert_eq!(expect_next(&mut tokens), TokenValueRef::MatchAnyNumberOfLines);
+        assert_eq!(
+            expect_next(&mut tokens),
+            TokenValueRef::MatchAnyNumberOfLines
+        );
         assert_eq!(expect_next(&mut tokens), TokenValueRef::MatchText("k "));
         assert_eq!(expect_next(&mut tokens), TokenValueRef::Var("Y"));
         assert_eq!(expect_next(&mut tokens), TokenValueRef::MatchText(" z"));
@@ -467,16 +539,25 @@ k ${ Y } z
     fn test_newline_match_tokens() {
         let mut tokens;
 
-        tokens = tokenize(default_options(), b"..
+        tokens = tokenize(
+            default_options(),
+            b"..
 a
 b
 ..
-");
-        assert_eq!(expect_next(&mut tokens), TokenValueRef::MatchAnyNumberOfLines);
+",
+        );
+        assert_eq!(
+            expect_next(&mut tokens),
+            TokenValueRef::MatchAnyNumberOfLines
+        );
         assert_eq!(expect_next(&mut tokens), TokenValueRef::MatchText("a"));
         assert_eq!(expect_next(&mut tokens), TokenValueRef::MatchNewline);
         assert_eq!(expect_next(&mut tokens), TokenValueRef::MatchText("b"));
-        assert_eq!(expect_next(&mut tokens), TokenValueRef::MatchAnyNumberOfLines);
+        assert_eq!(
+            expect_next(&mut tokens),
+            TokenValueRef::MatchAnyNumberOfLines
+        );
         assert_eq!(tokens.next(), None);
     }
 }

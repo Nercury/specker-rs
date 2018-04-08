@@ -5,12 +5,12 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use std::path::{Path, PathBuf};
-use walkdir::{self, WalkDir};
+use Result;
 use spec::{Options, Spec};
 use std::fs::File;
 use std::io::Read;
-use Result;
+use std::path::{Path, PathBuf};
+use walkdir::{self, WalkDir};
 
 /// Parsed specification at a path.
 #[derive(Debug, Clone)]
@@ -35,11 +35,13 @@ impl<'a> Iterator for SpecWalkIter<'a> {
                 None => return None,
                 Some(Err(e)) => return Some(Err(e.into())),
                 Some(Ok(entry)) => {
-                    return Some(match (entry.file_type().is_file(), entry.path().extension()) {
-                        (true, Some(v)) if v == self.extension => self.process_entry(&entry),
-                        _ => continue,
-                    })
-                },
+                    return Some(
+                        match (entry.file_type().is_file(), entry.path().extension()) {
+                            (true, Some(v)) if v == self.extension => self.process_entry(&entry),
+                            _ => continue,
+                        },
+                    )
+                }
             }
         }
     }
@@ -60,7 +62,11 @@ impl<'a> SpecWalkIter<'a> {
 }
 
 /// Walks spec directory and returns the iterator over all parsed `SpecPath` objects.
-pub fn walk_spec_dir<'a>(path: &Path, extension: &'a str, options: Options<'a>) -> SpecWalkIter<'a> {
+pub fn walk_spec_dir<'a>(
+    path: &Path,
+    extension: &'a str,
+    options: Options<'a>,
+) -> SpecWalkIter<'a> {
     SpecWalkIter {
         extension: extension,
         walk_dir: WalkDir::new(path).into_iter(),

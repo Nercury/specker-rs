@@ -5,13 +5,13 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use ast;
+use error::{At, FilePosition, ParseError, TemplateMatchError, TemplateWriteError};
 use std::collections::HashMap;
-use std::result;
 use std::io::{Read, Write};
+use std::result;
 use std::slice;
 use std::str;
-use error::{ParseError, TemplateWriteError, TemplateMatchError, At, FilePosition};
-use ast;
 use tokens;
 
 /// Specification parser options.
@@ -39,18 +39,20 @@ impl<'a> IntoIterator for &'a Spec {
 
     fn into_iter(self) -> Self::IntoIter {
         ItemIter {
-            inner: self.ast.items.iter()
+            inner: self.ast.items.iter(),
         }
     }
 }
 
 impl Spec {
     /// Parse specification from in-memory contents.
-    pub fn parse<'a>(options: Options<'a>, contents: &'a [u8]) -> result::Result<Spec, At<ParseError>> {
+    pub fn parse<'a>(
+        options: Options<'a>,
+        contents: &'a [u8],
+    ) -> result::Result<Spec, At<ParseError>> {
         Ok(Spec {
-            ast: ast::Parser::new(
-                tokens::tokenize(options.into(), contents).peekable()
-            ).parse_spec()?
+            ast: ast::Parser::new(tokens::tokenize(options.into(), contents).peekable())
+                .parse_spec()?,
         })
     }
 
@@ -92,23 +94,30 @@ impl<'s> Item<'s> {
     }
 
     /// Writes template contents to specified path.
-    pub fn write_contents<O: Write>(&'s self, output: &mut O, params: &HashMap<&str, &str>)
-                                    -> result::Result<(), TemplateWriteError> {
+    pub fn write_contents<O: Write>(
+        &'s self,
+        output: &mut O,
+        params: &HashMap<&str, &str>,
+    ) -> result::Result<(), TemplateWriteError> {
         // validation
 
         for s in self.template {
             match *s {
-                ast::Match::MultipleLines =>
-                    return Err(TemplateWriteError::CanNotWriteMatchAnySymbols),
-                ast::Match::Var(ref key) if !params.contains_key(&key[..]) =>
-                    return Err(TemplateWriteError::MissingParam(key.to_owned())),
+                ast::Match::MultipleLines => {
+                    return Err(TemplateWriteError::CanNotWriteMatchAnySymbols)
+                }
+                ast::Match::Var(ref key) if !params.contains_key(&key[..]) => {
+                    return Err(TemplateWriteError::MissingParam(key.to_owned()))
+                }
                 _ => continue,
             }
         }
 
         for s in self.template {
             match *s {
-                ast::Match::NewLine => { output.write(b"\n")?; },
+                ast::Match::NewLine => {
+                    output.write(b"\n")?;
+                }
                 ast::Match::Text(ref v) => write!(output, "{}", v)?,
                 ast::Match::Var(ref v) => write!(output, "{}", params.get(&v[..]).unwrap())?, // validated above
                 _ => unreachable!(),
@@ -126,7 +135,6 @@ impl<'s> Item<'s> {
 
     /// Separates tokens into groups where each groups is a line.
     fn get_multiline_match_groups(&'s self) -> Vec<MultilineMatchState<'s>> {
-
         // this could be written to return an iterator, but I leave this work to someone from future
         // good luck!
 
@@ -149,7 +157,7 @@ impl<'s> Item<'s> {
                         results.push(MultilineMatchState::Line(LineGroup::new(vec![])));
                     }
                     prev_group = Some(Vec::new());
-                },
+                }
                 ref other => {
                     if let Some(ref mut matches) = prev_group {
                         matches.push(other);
@@ -170,12 +178,17 @@ impl<'s> Item<'s> {
     /// Try to match specification to input and return any errors if they don't match.
     ///
     /// The values from `params` map will be substituted in as template vars.
-    pub fn match_contents<I: Read>(&'s self, input: &mut I, params: &HashMap<&str, &str>)
-                                   -> result::Result<(), At<TemplateMatchError>> {
+    pub fn match_contents<I: Read>(
+        &'s self,
+        input: &mut I,
+        params: &HashMap<&str, &str>,
+    ) -> result::Result<(), At<TemplateMatchError>> {
         let mut pos = FilePosition::new();
         let mut eol_pos = FilePosition::new();
         let mut contents = Vec::new();
-        input.read_to_end(&mut contents).map_err(|e| TemplateMatchError::from(e).at(pos, pos))?;
+        input
+            .read_to_end(&mut contents)
+            .map_err(|e| TemplateMatchError::from(e).at(pos, pos))?;
 
         let mut skip_lines_state = false;
         let mut had_new_line = true;
@@ -188,57 +201,60 @@ impl<'s> Item<'s> {
             match state {
                 MultilineMatchState::MultipleLines => {
                     skip_lines_state = true;
-                },
-                MultilineMatchState::Line(line) => {
-                    'text: loop {
-                        let pos_byte = pos.byte;
-                        match line.matches(pos, &contents, params) {
-                            Ok((bytes, end_bytes)) => {
-                                if bytes == 0 && !had_new_line {
-                                    return Err(TemplateMatchError::ExpectedEol.at(pos, pos));
-                                }
-
-                                pos.advance(bytes);
-                                pos.next_line(end_bytes);
-                                had_new_line = end_bytes > 0;
-                                skip_lines_state = false;
-                                update_eol(&pos, &mut eol_pos, &contents);
-
-                                break 'text;
+                }
+                MultilineMatchState::Line(line) => 'text: loop {
+                    let pos_byte = pos.byte;
+                    match line.matches(pos, &contents, params) {
+                        Ok((bytes, end_bytes)) => {
+                            if bytes == 0 && !had_new_line {
+                                return Err(TemplateMatchError::ExpectedEol.at(pos, pos));
                             }
-                            Err(err_match) => if skip_lines_state {
-                                if pos_byte >= contents.len() {
-                                    match err_match {
-                                        LineGroupMatchErr::Text { pos: err_pos, text } =>
-                                            return Err(
-                                                TemplateMatchError::ExpectedTextFoundEof(text.to_string())
-                                                    .at(err_pos, eol_pos)
-                                            ),
-                                        _ => (),
-                                    };
-                                }
 
-                                pos.advance(eol_pos.byte - pos_byte);
-                                pos.next_line(matches_newline(&eol_pos, &contents).expect("expected newline"));
-                                update_eol(&pos, &mut eol_pos, &contents);
+                            pos.advance(bytes);
+                            pos.next_line(end_bytes);
+                            had_new_line = end_bytes > 0;
+                            skip_lines_state = false;
+                            update_eol(&pos, &mut eol_pos, &contents);
 
-                                continue 'text;
-                            } else {
-                                match err_match {
-                                    LineGroupMatchErr::Text { pos, text } =>
-                                        return Err(TemplateMatchError::ExpectedText {
-                                            expected: text.to_string(),
-                                            found: String::from_utf8_lossy(&contents[pos.byte..eol_pos.byte]).into_owned(),
-                                        }.at(pos, eol_pos)),
-                                    LineGroupMatchErr::ParamNotFound { pos, key } =>
-                                        return Err(TemplateMatchError::MissingParam(key.into())
-                                            .at(pos, pos)),
-                                    LineGroupMatchErr::NewLineOrEof { pos } =>
-                                        return Err(TemplateMatchError::ExpectedEol
-                                            .at(pos, pos)),
-                                }
-                            }
+                            break 'text;
                         }
+                        Err(err_match) => if skip_lines_state {
+                            if pos_byte >= contents.len() {
+                                match err_match {
+                                    LineGroupMatchErr::Text { pos: err_pos, text } => {
+                                        return Err(TemplateMatchError::ExpectedTextFoundEof(
+                                            text.to_string(),
+                                        ).at(err_pos, eol_pos))
+                                    }
+                                    _ => (),
+                                };
+                            }
+
+                            pos.advance(eol_pos.byte - pos_byte);
+                            pos.next_line(
+                                matches_newline(&eol_pos, &contents).expect("expected newline"),
+                            );
+                            update_eol(&pos, &mut eol_pos, &contents);
+
+                            continue 'text;
+                        } else {
+                            match err_match {
+                                LineGroupMatchErr::Text { pos, text } => {
+                                    return Err(TemplateMatchError::ExpectedText {
+                                        expected: text.to_string(),
+                                        found: String::from_utf8_lossy(
+                                            &contents[pos.byte..eol_pos.byte],
+                                        ).into_owned(),
+                                    }.at(pos, eol_pos))
+                                }
+                                LineGroupMatchErr::ParamNotFound { pos, key } => {
+                                    return Err(TemplateMatchError::MissingParam(key.into()).at(pos, pos))
+                                }
+                                LineGroupMatchErr::NewLineOrEof { pos } => {
+                                    return Err(TemplateMatchError::ExpectedEol.at(pos, pos))
+                                }
+                            }
+                        },
                     }
                 },
             }
@@ -266,17 +282,9 @@ enum MultilineMatchState<'a> {
 
 #[derive(Debug)]
 enum LineGroupMatchErr<'a> {
-    Text {
-        pos: FilePosition,
-        text: &'a str,
-    },
-    ParamNotFound {
-        pos: FilePosition,
-        key: &'a str,
-    },
-    NewLineOrEof {
-        pos: FilePosition,
-    }
+    Text { pos: FilePosition, text: &'a str },
+    ParamNotFound { pos: FilePosition, key: &'a str },
+    NewLineOrEof { pos: FilePosition },
 }
 
 /// All tokens for a line.
@@ -287,33 +295,51 @@ struct LineGroup<'a> {
 
 impl<'a> LineGroup<'a> {
     pub fn new<'r>(tokens: Vec<&'r ast::Match>) -> LineGroup<'r> {
-        LineGroup {
-            tokens: tokens
-        }
+        LineGroup { tokens: tokens }
     }
 
     /// Check if a line match template tokens `MultipleLines` and `NewLine` are handled by the
     /// called that separated tokens into lines.
-    pub fn matches<'o, 'r>(&'a self, mut pos: FilePosition, content: &'o [u8], params: &HashMap<&str, &'r str>)
-        -> result::Result<(usize, usize), LineGroupMatchErr<'r>>
-        where 'a: 'r
+    pub fn matches<'o, 'r>(
+        &'a self,
+        mut pos: FilePosition,
+        content: &'o [u8],
+        params: &HashMap<&str, &'r str>,
+    ) -> result::Result<(usize, usize), LineGroupMatchErr<'r>>
+    where
+        'a: 'r,
     {
         let start_pos = pos;
 
         for token in &self.tokens {
             match **token {
-                ast::Match::Text(ref text) => if let Some(bytes) = matches_content(&pos, content, text.as_bytes()) {
-                    pos.advance(bytes);
-                } else {
-                    return Err(LineGroupMatchErr::Text { pos: pos, text: text });
-                },
-                ast::Match::Var(ref key) => match params.get(&key[..]) {
-                    Some(ref text) => if let Some(bytes) = matches_content(&pos, content, text.as_bytes()) {
+                ast::Match::Text(ref text) => {
+                    if let Some(bytes) = matches_content(&pos, content, text.as_bytes()) {
                         pos.advance(bytes);
                     } else {
-                        return Err(LineGroupMatchErr::Text { pos: pos, text: text });
-                    },
-                    None => return Err(LineGroupMatchErr::ParamNotFound { pos: pos, key: &key[..] }),
+                        return Err(LineGroupMatchErr::Text {
+                            pos: pos,
+                            text: text,
+                        });
+                    }
+                }
+                ast::Match::Var(ref key) => match params.get(&key[..]) {
+                    Some(ref text) => {
+                        if let Some(bytes) = matches_content(&pos, content, text.as_bytes()) {
+                            pos.advance(bytes);
+                        } else {
+                            return Err(LineGroupMatchErr::Text {
+                                pos: pos,
+                                text: text,
+                            });
+                        }
+                    }
+                    None => {
+                        return Err(LineGroupMatchErr::ParamNotFound {
+                            pos: pos,
+                            key: &key[..],
+                        })
+                    }
                 },
                 ast::Match::MultipleLines => unreachable!(),
                 ast::Match::NewLine => unreachable!(),
@@ -376,7 +402,10 @@ impl<'a> Iterator for ItemIter<'a> {
     type Item = Item<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|i| Item { params: &i.params, template: &i.template })
+        self.inner.next().map(|i| Item {
+            params: &i.params,
+            template: &i.template,
+        })
     }
 }
 
